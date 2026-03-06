@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebEdit 编辑面板</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <div class="panel">
+    <!-- 顶部标题栏 -->
+    <header class="panel-header">
+      <div class="logo">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+        </svg>
+        <span>WebEdit</span>
+      </div>
+      <div class="header-actions">
+        <button id="btn-undo" class="icon-btn" title="撤销 (Ctrl+Z)" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="1 4 1 10 7 10"/>
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+          </svg>
+        </button>
+        <button id="btn-redo" class="icon-btn" title="重做 (Ctrl+Y)" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"/>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- 编辑模式开关 -->
+    <div class="edit-toggle-section">
+      <button id="btn-toggle-edit" class="edit-toggle-btn">
+        <span class="toggle-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+        </span>
+        <span class="toggle-text">开启编辑模式</span>
+      </button>
+    </div>
+
+    <!-- 未选中元素时的提示 -->
+    <div id="no-selection" class="placeholder-message">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.4">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M8 15h8"/>
+        <line x1="9" y1="9" x2="9.01" y2="9"/>
+        <line x1="15" y1="9" x2="15.01" y2="9"/>
+      </svg>
+      <p>开启编辑模式后<br>点击页面元素开始编辑</p>
+    </div>
+
+    <!-- 编辑面板（选中元素后显示） -->
+    <div id="edit-panels" class="edit-panels" style="display: none;">
+      <!-- 元素信息 -->
+      <div class="panel-section element-info">
+        <div class="element-tag" id="element-tag">div</div>
+        <div class="element-path" id="element-path" title="">body > div</div>
+      </div>
+
+      <!-- 文本编辑区 -->
+      <div class="panel-section">
+        <div class="section-header">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
+          <span>文本</span>
+        </div>
+        <div class="section-body">
+          <!-- 字体选择 -->
+          <div class="control-row">
+            <label>字体</label>
+            <select id="font-family" class="select-input">
+              <option value="">默认</option>
+              <option value="Arial, sans-serif">Arial</option>
+              <option value="'Helvetica Neue', Helvetica, sans-serif">Helvetica</option>
+              <option value="Georgia, serif">Georgia</option>
+              <option value="'Times New Roman', serif">Times New Roman</option>
+              <option value="'Courier New', monospace">Courier New</option>
+              <option value="Verdana, sans-serif">Verdana</option>
+              <option value="'Microsoft YaHei', sans-serif">微软雅黑</option>
+              <option value="'PingFang SC', sans-serif">苹方</option>
+              <option value="'Source Han Sans', sans-serif">思源黑体</option>
+              <option value="'Noto Sans SC', sans-serif">Noto Sans</option>
+            </select>
+          </div>
+
+          <!-- 字号 -->
+          <div class="control-row">
+            <label>字号</label>
+            <div class="input-with-unit">
+              <input type="number" id="font-size" class="number-input" min="8" max="200" step="1">
+              <span class="unit">px</span>
+            </div>
+          </div>
+
+          <!-- 文字颜色 -->
+          <div class="control-row">
+            <label>颜色</label>
+            <div class="color-input-wrapper">
+              <input type="color" id="text-color" class="color-input">
+              <input type="text" id="text-color-hex" class="hex-input" placeholder="#000000">
+            </div>
+          </div>
+
+          <!-- 文字样式按钮组 -->
+          <div class="control-row">
+            <label>样式</label>
+            <div class="btn-group">
+              <button class="style-btn" id="btn-bold" title="加粗">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/></svg>
+              </button>
+              <button class="style-btn" id="btn-italic" title="斜体">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></svg>
+              </button>
+              <button class="style-btn" id="btn-underline" title="下划线">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- 文本对齐 -->
+          <div class="control-row">
+            <label>对齐</label>
+            <div class="btn-group">
+              <button class="style-btn" id="btn-align-left" title="左对齐" data-align="left">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="17" y1="14" x2="3" y2="14"/><line x1="21" y1="18" x2="3" y2="18"/></svg>
+              </button>
+              <button class="style-btn" id="btn-align-center" title="居中" data-align="center">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="10" x2="6" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="18" y1="14" x2="6" y2="14"/><line x1="21" y1="18" x2="3" y2="18"/></svg>
+              </button>
+              <button class="style-btn" id="btn-align-right" title="右对齐" data-align="right">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="21" y1="10" x2="7" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="7" y2="14"/><line x1="21" y1="18" x2="3" y2="18"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 外观编辑区 -->
+      <div class="panel-section">
+        <div class="section-header">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>
+          <span>外观</span>
+        </div>
+        <div class="section-body">
+          <!-- 背景颜色 -->
+          <div class="control-row">
+            <label>背景</label>
+            <div class="color-input-wrapper">
+              <input type="color" id="bg-color" class="color-input">
+              <input type="text" id="bg-color-hex" class="hex-input" placeholder="transparent">
+            </div>
+          </div>
+
+          <!-- 透明度 -->
+          <div class="control-row">
+            <label>透明度</label>
+            <div class="slider-wrapper">
+              <input type="range" id="opacity" class="slider" min="0" max="1" step="0.05" value="1">
+              <span id="opacity-value" class="slider-value">1</span>
+            </div>
+          </div>
+
+          <!-- 圆角 -->
+          <div class="control-row">
+            <label>圆角</label>
+            <div class="input-with-unit">
+              <input type="number" id="border-radius" class="number-input" min="0" max="999" step="1">
+              <span class="unit">px</span>
+            </div>
+          </div>
+
+          <!-- 边框 -->
+          <div class="control-row">
+            <label>边框</label>
+            <div class="border-controls">
+              <input type="number" id="border-width" class="number-input small" min="0" max="20" step="1" placeholder="0">
+              <select id="border-style" class="select-input small">
+                <option value="none">无</option>
+                <option value="solid">实线</option>
+                <option value="dashed">虚线</option>
+                <option value="dotted">点线</option>
+              </select>
+              <input type="color" id="border-color" class="color-input small">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 间距编辑区 -->
+      <div class="panel-section">
+        <div class="section-header">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+          <span>间距</span>
+        </div>
+        <div class="section-body">
+          <!-- 内边距 -->
+          <div class="spacing-group">
+            <label class="spacing-label">内边距</label>
+            <div class="spacing-inputs">
+              <div class="spacing-input-item">
+                <input type="number" id="padding-top" class="number-input tiny" min="0" step="1" placeholder="0">
+                <span class="spacing-dir">上</span>
+              </div>
+              <div class="spacing-input-item">
+                <input type="number" id="padding-right" class="number-input tiny" min="0" step="1" placeholder="0">
+                <span class="spacing-dir">右</span>
+              </div>
+              <div class="spacing-input-item">
+                <input type="number" id="padding-bottom" class="number-input tiny" min="0" step="1" placeholder="0">
+                <span class="spacing-dir">下</span>
+              </div>
+              <div class="spacing-input-item">
+                <input type="number" id="padding-left" class="number-input tiny" min="0" step="1" placeholder="0">
+                <span class="spacing-dir">左</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 外边距 -->
+          <div class="spacing-group">
+            <label class="spacing-label">外边距</label>
+            <div class="spacing-inputs">
+              <div class="spacing-input-item">
+                <input type="number" id="margin-top" class="number-input tiny" min="-999" step="1" placeholder="0">
+                <span class="spacing-dir">上</span>
+              </div>
+              <div class="spacing-input-item">
+                <input type="number" id="margin-right" class="number-input tiny" min="-999" step="1" placeholder="0">
+                <span class="spacing-dir">右</span>
+              </div>
+              <div class="spacing-input-item">
+                <input type="number" id="margin-bottom" class="number-input tiny" min="-999" step="1" placeholder="0">
+                <span class="spacing-dir">下</span>
+              </div>
+              <div class="spacing-input-item">
+                <input type="number" id="margin-left" class="number-input tiny" min="-999" step="1" placeholder="0">
+                <span class="spacing-dir">左</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 元素操作区 -->
+      <div class="panel-section">
+        <div class="section-header">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+          <span>元素操作</span>
+        </div>
+        <div class="section-body">
+          <div class="action-buttons">
+            <button id="btn-hide" class="action-btn action-hide" title="隐藏元素（可撤销）">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+              <span>隐藏</span>
+            </button>
+            <button id="btn-delete" class="action-btn action-delete" title="删除元素（可撤销）">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              <span>删除</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 保存按钮（仅本地文件可用） -->
+      <div class="panel-section" id="save-section" style="display: none;">
+        <button id="btn-save" class="save-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+            <polyline points="17 21 17 13 7 13 7 21"/>
+            <polyline points="7 3 7 8 15 8"/>
+          </svg>
+          <span>保存为本地文件</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

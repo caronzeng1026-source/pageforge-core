@@ -1,0 +1,117 @@
+/* WebEdit Content Script 样式
+ * 编辑模式下的元素高亮、选中、光标等视觉反馈
+ */
+
+/* 编辑模式下光标变为十字选择器 */
+body.webedit-active,
+body.webedit-active * {
+  cursor: crosshair !important;
+}
+
+/* 鼠标悬停时的高亮效果 */
+.webedit-hover {
+  outline: 2px dashed rgba(59, 130, 246, 0.7) !important;
+  outline-offset: 2px !important;
+  background-color: rgba(59, 130, 246, 0.04) !important;
+  transition: outline 0.15s ease, background-color 0.15s ease !important;
+}
+
+/* 选中元素的高亮效果 */
+.webedit-selected {
+  outline: 2px solid rgba(59, 130, 246, 0.9) !important;
+  outline-offset: 2px !important;
+  background-color: rgba(59, 130, 246, 0.06) !important;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15) !important;
+  transition: all 0.15s ease !important;
+}
+
+/* 选中元素且正在编辑文本时 */
+.webedit-selected[contenteditable="true"] {
+  cursor: text !important;
+  outline-color: rgba(16, 185, 129, 0.9) !important;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.15) !important;
+  background-color: rgba(16, 185, 129, 0.04) !important;
+}
+
+/* 被隐藏的元素标记（编辑模式下仍然可见，降低透明度） */
+body.webedit-active .webedit-hidden-element {
+  display: block !important;
+  opacity: 0.2 !important;
+  outline: 2px dashed rgba(239, 68, 68, 0.5) !important;
+  outline-offset: 2px !important;
+  pointer-events: auto !important;
+}
+
+/* 防止编辑模式下链接跳转和表单提交等默认行为的视觉提示 */
+body.webedit-active a,
+body.webedit-active button,
+body.webedit-active input,
+body.webedit-active select,
+body.webedit-active textarea {
+  pointer-events: auto !important;
+}
+
+/* ===== 拖拽相关样式 ===== */
+
+/* 拖拽进行中的全局光标 */
+body.webedit-dragging,
+body.webedit-dragging * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+/* 正在被拖拽的原始元素（半透明占位） */
+.webedit-drag-source {
+  opacity: 0.3 !important;
+  outline: 2px dashed rgba(59, 130, 246, 0.5) !important;
+  outline-offset: 2px !important;
+}
+
+/* 跟随鼠标的拖拽幽灵 */
+.webedit-drag-ghost {
+  position: fixed !important;
+  pointer-events: none !important;
+  z-index: 2147483647 !important;
+  opacity: 0.8 !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+  border-radius: 4px !important;
+  transform: scale(0.95) !important;
+  transition: none !important;
+  max-width: 400px !important;
+  max-height: 300px !important;
+  overflow: hidden !important;
+}
+
+/* 放置指示线（水平线标记插入位置） */
+.webedit-drop-indicator {
+  position: absolute !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 3px !important;
+  background: linear-gradient(90deg, transparent, #3b82f6, #3b82f6, transparent) !important;
+  border-radius: 2px !important;
+  z-index: 2147483646 !important;
+  pointer-events: none !important;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.5) !important;
+  animation: webedit-pulse 1s ease-in-out infinite !important;
+}
+
+/* 放置指示线的呼吸动画 */
+@keyframes webedit-pulse {
+
+  0%,
+  100% {
+    opacity: 0.7;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+/* 拖拽目标容器的高亮 */
+.webedit-drop-target {
+  outline: 2px dashed rgba(16, 185, 129, 0.6) !important;
+  outline-offset: -2px !important;
+  background-color: rgba(16, 185, 129, 0.04) !important;
+}

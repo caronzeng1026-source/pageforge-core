@@ -1,0 +1,480 @@
+// WebEdit Side Panel 交互逻辑
+// 负责：控件事件绑定、样式同步、与 Content Script 的消息通信
+
+(() => {
+    'use strict';
+
+    // =====================================================
+    // 状态
+    // =====================================================
+    let isEditing = false;
+    let currentTabId = null;
+    let currentElementStyles = null;
+
+    // =====================================================
+    // DOM 引用
+    // =====================================================
+    const elements = {
+        // 编辑模式
+        toggleBtn: document.getElementById('btn-toggle-edit'),
+        toggleText: document.querySelector('.toggle-text'),
+
+        // 撤销/重做
+        undoBtn: document.getElementById('btn-undo'),
+        redoBtn: document.getElementById('btn-redo'),
+
+        // 面板显示切换
+        noSelection: document.getElementById('no-selection'),
+        editPanels: document.getElementById('edit-panels'),
+
+        // 元素信息
+        elementTag: document.getElementById('element-tag'),
+        elementPath: document.getElementById('element-path'),
+
+        // 文本控件
+        fontFamily: document.getElementById('font-family'),
+        fontSize: document.getElementById('font-size'),
+        textColor: document.getElementById('text-color'),
+        textColorHex: document.getElementById('text-color-hex'),
+        btnBold: document.getElementById('btn-bold'),
+        btnItalic: document.getElementById('btn-italic'),
+        btnUnderline: document.getElementById('btn-underline'),
+        btnAlignLeft: document.getElementById('btn-align-left'),
+        btnAlignCenter: document.getElementById('btn-align-center'),
+        btnAlignRight: document.getElementById('btn-align-right'),
+
+        // 外观控件
+        bgColor: document.getElementById('bg-color'),
+        bgColorHex: document.getElementById('bg-color-hex'),
+        opacity: document.getElementById('opacity'),
+        opacityValue: document.getElementById('opacity-value'),
+        borderRadius: document.getElementById('border-radius'),
+        borderWidth: document.getElementById('border-width'),
+        borderStyle: document.getElementById('border-style'),
+        borderColor: document.getElementById('border-color'),
+
+        // 间距控件
+        paddingTop: document.getElementById('padding-top'),
+        paddingRight: document.getElementById('padding-right'),
+        paddingBottom: document.getElementById('padding-bottom'),
+        paddingLeft: document.getElementById('padding-left'),
+        marginTop: document.getElementById('margin-top'),
+        marginRight: document.getElementById('margin-right'),
+        marginBottom: document.getElementById('margin-bottom'),
+        marginLeft: document.getElementById('margin-left'),
+
+        // 元素操作
+        btnHide: document.getElementById('btn-hide'),
+        btnDelete: document.getElementById('btn-delete'),
+
+        // 保存
+        saveSection: document.getElementById('save-section'),
+        btnSave: document.getElementById('btn-save'),
+    };
+
+    // =====================================================
+    // 初始化
+    // =====================================================
+
+    async function init() {
+        // 获取当前标签页
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tab) {
+            currentTabId = tab.id;
+
+            // 判断是否为本地文件页面
+            if (tab.url && tab.url.startsWith('file://')) {
+                elements.saveSection.style.display = 'block';
+            }
+        }
+
+        // 绑定事件
+        bindEvents();
+    }
+
+    // =====================================================
+    // 事件绑定
+    // =====================================================
+
+    function bindEvents() {
+        // 编辑模式切换
+        elements.toggleBtn.addEventListener('click', toggleEditMode);
+
+        // 撤销/重做
+        elements.undoBtn.addEventListener('click', () => sendAction('UNDO'));
+        elements.redoBtn.addEventListener('click', () => sendAction('REDO'));
+
+        // 文本样式
+        elements.fontFamily.addEventListener('change', () => applyStyle({ fontFamily: elements.fontFamily.value }));
+        elements.fontSize.addEventListener('change', () => applyStyle({ fontSize: elements.fontSize.value + 'px' }));
+        elements.fontSize.addEventListener('input', () => applyStyle({ fontSize: elements.fontSize.value + 'px' }));
+
+        // 文字颜色
+        elements.textColor.addEventListener('input', (e) => {
+            elements.textColorHex.value = e.target.value;
+            applyStyle({ color: e.target.value });
+        });
+        elements.textColorHex.addEventListener('change', (e) => {
+            const color = normalizeColor(e.target.value);
+            if (color) {
+                elements.textColor.value = color;
+                applyStyle({ color });
+            }
+        });
+
+        // 文字样式按钮
+        elements.btnBold.addEventListener('click', () => {
+            const isBold = elements.btnBold.classList.toggle('active');
+            applyStyle({ fontWeight: isBold ? 'bold' : 'normal' });
+        });
+        elements.btnItalic.addEventListener('click', () => {
+            const isItalic = elements.btnItalic.classList.toggle('active');
+            applyStyle({ fontStyle: isItalic ? 'italic' : 'normal' });
+        });
+        elements.btnUnderline.addEventListener('click', () => {
+            const isUnderline = elements.btnUnderline.classList.toggle('active');
+            applyStyle({ textDecoration: isUnderline ? 'underline' : 'none' });
+        });
+
+        // 文本对齐
+        const alignBtns = [elements.btnAlignLeft, elements.btnAlignCenter, elements.btnAlignRight];
+        alignBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                alignBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                applyStyle({ textAlign: btn.dataset.align });
+            });
+        });
+
+        // 背景颜色
+        elements.bgColor.addEventListener('input', (e) => {
+            elements.bgColorHex.value = e.target.value;
+            applyStyle({ backgroundColor: e.target.value });
+        });
+        elements.bgColorHex.addEventListener('change', (e) => {
+            const color = normalizeColor(e.target.value);
+            if (color) {
+                elements.bgColor.value = color;
+                applyStyle({ backgroundColor: color });
+            }
+        });
+
+        // 透明度
+        elements.opacity.addEventListener('input', (e) => {
+            elements.opacityValue.textContent = e.target.value;
+            applyStyle({ opacity: e.target.value });
+        });
+
+        // 圆角
+        elements.borderRadius.addEventListener('change', () => applyStyle({ borderRadius: elements.borderRadius.value + 'px' }));
+        elements.borderRadius.addEventListener('input', () => applyStyle({ borderRadius: elements.borderRadius.value + 'px' }));
+
+        // 边框
+        elements.borderWidth.addEventListener('change', updateBorder);
+        elements.borderStyle.addEventListener('change', updateBorder);
+        elements.borderColor.addEventListener('input', updateBorder);
+
+        // 间距
+        const spacingInputs = [
+            { id: 'paddingTop', prop: 'paddingTop' },
+            { id: 'paddingRight', prop: 'paddingRight' },
+            { id: 'paddingBottom', prop: 'paddingBottom' },
+            { id: 'paddingLeft', prop: 'paddingLeft' },
+            { id: 'marginTop', prop: 'marginTop' },
+            { id: 'marginRight', prop: 'marginRight' },
+            { id: 'marginBottom', prop: 'marginBottom' },
+            { id: 'marginLeft', prop: 'marginLeft' },
+        ];
+
+        spacingInputs.forEach(({ id, prop }) => {
+            const input = elements[id];
+            const handler = () => applyStyle({ [prop]: input.value + 'px' });
+            input.addEventListener('change', handler);
+            input.addEventListener('input', handler);
+        });
+
+        // 元素操作
+        elements.btnHide.addEventListener('click', () => sendElementAction('hide'));
+        elements.btnDelete.addEventListener('click', () => sendElementAction('delete'));
+
+        // 保存
+        elements.btnSave.addEventListener('click', savePage);
+
+        // 监听来自 Content Script 的消息
+        chrome.runtime.onMessage.addListener(handleMessage);
+
+        // 监听标签页切换
+        chrome.tabs.onActivated.addListener(async (activeInfo) => {
+            currentTabId = activeInfo.tabId;
+            const tab = await chrome.tabs.get(currentTabId);
+            if (tab.url && tab.url.startsWith('file://')) {
+                elements.saveSection.style.display = 'block';
+            } else {
+                elements.saveSection.style.display = 'none';
+            }
+            // 重置面板
+            showNoSelection();
+        });
+    }
+
+    // =====================================================
+    // 编辑模式
+    // =====================================================
+
+    function toggleEditMode() {
+        isEditing = !isEditing;
+
+        elements.toggleBtn.classList.toggle('active', isEditing);
+        elements.toggleText.textContent = isEditing ? '关闭编辑模式' : '开启编辑模式';
+        elements.undoBtn.disabled = !isEditing;
+        elements.redoBtn.disabled = !isEditing;
+
+        if (!isEditing) {
+            showNoSelection();
+        }
+
+        chrome.runtime.sendMessage({
+            type: 'TOGGLE_EDIT_MODE',
+            payload: { tabId: currentTabId, isEditing }
+        });
+    }
+
+    // =====================================================
+    // 消息处理
+    // =====================================================
+
+    function handleMessage(message) {
+        const { type, payload } = message;
+
+        switch (type) {
+            case 'ELEMENT_SELECTED':
+                showElementPanels(payload);
+                break;
+            case 'EDIT_MODE_CHANGED':
+                // Content Script 通知编辑模式变化
+                isEditing = payload.isEditing;
+                elements.toggleBtn.classList.toggle('active', isEditing);
+                elements.toggleText.textContent = isEditing ? '关闭编辑模式' : '开启编辑模式';
+                break;
+        }
+    }
+
+    // =====================================================
+    // 面板显示
+    // =====================================================
+
+    function showNoSelection() {
+        elements.noSelection.style.display = 'flex';
+        elements.editPanels.style.display = 'none';
+        currentElementStyles = null;
+    }
+
+    function showElementPanels(payload) {
+        elements.noSelection.style.display = 'none';
+        elements.editPanels.style.display = 'block';
+
+        currentElementStyles = payload.styles;
+
+        // 更新元素信息
+        elements.elementTag.textContent = payload.tagName;
+        elements.elementPath.textContent = payload.path;
+        elements.elementPath.title = payload.path;
+
+        // 同步控件值
+        syncControlsFromStyles(payload.styles);
+    }
+
+    /** 将元素的计算样式同步到面板控件 */
+    function syncControlsFromStyles(styles) {
+        // 字体（尝试匹配下拉选项）
+        const fontOptions = elements.fontFamily.options;
+        let fontMatched = false;
+        for (let i = 0; i < fontOptions.length; i++) {
+            if (styles.fontFamily.includes(fontOptions[i].text)) {
+                elements.fontFamily.selectedIndex = i;
+                fontMatched = true;
+                break;
+            }
+        }
+        if (!fontMatched) {
+            elements.fontFamily.selectedIndex = 0;
+        }
+
+        // 字号
+        elements.fontSize.value = parseInt(styles.fontSize) || 16;
+
+        // 文字颜色
+        const textColorHex = rgbToHex(styles.color);
+        elements.textColor.value = textColorHex;
+        elements.textColorHex.value = textColorHex;
+
+        // 文字样式
+        elements.btnBold.classList.toggle('active',
+            styles.fontWeight === 'bold' || parseInt(styles.fontWeight) >= 700);
+        elements.btnItalic.classList.toggle('active', styles.fontStyle === 'italic');
+        elements.btnUnderline.classList.toggle('active', styles.textDecoration.includes('underline'));
+
+        // 文本对齐
+        [elements.btnAlignLeft, elements.btnAlignCenter, elements.btnAlignRight].forEach(btn => {
+            btn.classList.toggle('active', styles.textAlign === btn.dataset.align);
+        });
+
+        // 背景颜色
+        const bgColorHex = rgbToHex(styles.backgroundColor);
+        elements.bgColor.value = bgColorHex;
+        elements.bgColorHex.value = bgColorHex === '#000000' && styles.backgroundColor.includes('rgba(0, 0, 0, 0)')
+            ? 'transparent' : bgColorHex;
+
+        // 透明度
+        elements.opacity.value = styles.opacity;
+        elements.opacityValue.textContent = styles.opacity;
+
+        // 圆角
+        elements.borderRadius.value = parseInt(styles.borderRadius) || 0;
+
+        // 边框
+        elements.borderWidth.value = parseInt(styles.borderWidth) || 0;
+        // 解析 border-style
+        const borderStyleValue = styles.borderStyle.split(' ')[0] || 'none';
+        elements.borderStyle.value = borderStyleValue;
+        elements.borderColor.value = rgbToHex(styles.borderColor);
+
+        // 间距
+        elements.paddingTop.value = parseInt(styles.paddingTop) || 0;
+        elements.paddingRight.value = parseInt(styles.paddingRight) || 0;
+        elements.paddingBottom.value = parseInt(styles.paddingBottom) || 0;
+        elements.paddingLeft.value = parseInt(styles.paddingLeft) || 0;
+        elements.marginTop.value = parseInt(styles.marginTop) || 0;
+        elements.marginRight.value = parseInt(styles.marginRight) || 0;
+        elements.marginBottom.value = parseInt(styles.marginBottom) || 0;
+        elements.marginLeft.value = parseInt(styles.marginLeft) || 0;
+    }
+
+    // =====================================================
+    // 样式应用
+    // =====================================================
+
+    function applyStyle(styles) {
+        if (!currentTabId) return;
+        chrome.runtime.sendMessage({
+            type: 'APPLY_STYLE',
+            payload: { tabId: currentTabId, styles }
+        });
+    }
+
+    function updateBorder() {
+        const width = elements.borderWidth.value || '0';
+        const style = elements.borderStyle.value;
+        const color = elements.borderColor.value;
+
+        if (style === 'none' || width === '0') {
+            applyStyle({ border: 'none' });
+        } else {
+            applyStyle({ border: `${width}px ${style} ${color}` });
+        }
+    }
+
+    // =====================================================
+    // 元素操作
+    // =====================================================
+
+    function sendAction(actionType) {
+        if (!currentTabId) return;
+        chrome.runtime.sendMessage({
+            type: actionType,
+            payload: { tabId: currentTabId }
+        });
+    }
+
+    function sendElementAction(action) {
+        if (!currentTabId) return;
+        chrome.runtime.sendMessage({
+            type: 'ELEMENT_ACTION',
+            payload: { tabId: currentTabId, action }
+        });
+        // 操作后重置面板
+        showNoSelection();
+    }
+
+    // =====================================================
+    // 页面保存
+    // =====================================================
+
+    async function savePage() {
+        if (!currentTabId) return;
+
+        const tab = await chrome.tabs.get(currentTabId);
+        // 从 URL 提取文件名
+        let fileName = 'edited-page.html';
+        if (tab.url) {
+            const urlPath = tab.url.replace('file://', '');
+            const lastSlash = urlPath.lastIndexOf('/');
+            if (lastSlash !== -1) {
+                fileName = urlPath.substring(lastSlash + 1);
+            }
+        }
+
+        // 请求 Content Script 提供当前页面 HTML
+        chrome.runtime.sendMessage({
+            type: 'GET_PAGE_HTML',
+            payload: { tabId: currentTabId }
+        }, (response) => {
+            if (response && response.html) {
+                chrome.runtime.sendMessage({
+                    type: 'SAVE_PAGE',
+                    payload: { html: response.html, fileName }
+                });
+            }
+        });
+    }
+
+    // =====================================================
+    // 辅助函数
+    // =====================================================
+
+    /** 将 RGB/RGBA 颜色字符串转换为 HEX 格式 */
+    function rgbToHex(rgb) {
+        if (!rgb || rgb === 'transparent' || rgb === 'rgba(0, 0, 0, 0)') {
+            return '#000000';
+        }
+        // 如果已经是 hex 格式直接返回
+        if (rgb.startsWith('#')) {
+            return rgb.length === 4
+                ? '#' + rgb[1] + rgb[1] + rgb[2] + rgb[2] + rgb[3] + rgb[3]
+                : rgb;
+        }
+        // 解析 rgb() 或 rgba()
+        const match = rgb.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+        if (!match) return '#000000';
+
+        const r = parseInt(match[1]);
+        const g = parseInt(match[2]);
+        const b = parseInt(match[3]);
+        return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    }
+
+    /** 标准化颜色输入（支持 #RGB, #RRGGBB 格式） */
+    function normalizeColor(value) {
+        const hex = value.trim();
+        if (/^#[0-9a-fA-F]{3}$/.test(hex)) {
+            return '#' + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3];
+        }
+        if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+            return hex;
+        }
+        // 尝试无 # 前缀
+        if (/^[0-9a-fA-F]{3}$/.test(hex)) {
+            return '#' + hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+        }
+        if (/^[0-9a-fA-F]{6}$/.test(hex)) {
+            return '#' + hex;
+        }
+        return null;
+    }
+
+    // =====================================================
+    // 启动
+    // =====================================================
+
+    init();
+})();
