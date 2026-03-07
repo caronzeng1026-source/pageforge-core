@@ -11,6 +11,24 @@
     let currentTabId = null;
     let currentElementStyles = null;
 
+    /** 安全发送扩展消息，防止 Extension context invalidated */
+    function safeSendMessage(message, callback) {
+        try {
+            if (!chrome.runtime?.id) {
+                throw new Error('Extension context invalidated.');
+            }
+            if (callback) {
+                chrome.runtime.sendMessage(message, callback);
+            } else {
+                chrome.runtime.sendMessage(message, () => {
+                    void chrome.runtime.lastError;
+                });
+            }
+        } catch (error) {
+            console.warn('WebEdit: Failed to send message', error);
+        }
+    }
+
     // =====================================================
     // DOM 引用
     // =====================================================
@@ -78,12 +96,22 @@
 
         // 布局属性
         layoutSection: document.getElementById('layout-section'),
+        // Display 模式切换
+        btnDisplayBlock: document.getElementById('btn-display-block'),
+        btnDisplayFlex: document.getElementById('btn-display-flex'),
+        btnDisplayGrid: document.getElementById('btn-display-grid'),
+        // Flex 选项容器
+        flexOptions: document.getElementById('flex-options'),
         btnFlexRow: document.getElementById('btn-flex-row'),
         btnFlexCol: document.getElementById('btn-flex-col'),
         flexGap: document.getElementById('flex-gap'),
         justifyContent: document.getElementById('justify-content'),
         alignItems: document.getElementById('align-items'),
         flexWrap: document.getElementById('flex-wrap'),
+        // Grid 选项容器和控件
+        gridOptions: document.getElementById('grid-options'),
+        gridGap: document.getElementById('grid-gap'),
+        gridAlignItems: document.getElementById('grid-align-items'),
     };
 
     // =====================================================
@@ -100,6 +128,9 @@
             if (tab.url && tab.url.startsWith('file://')) {
                 elements.saveSection.style.display = 'block';
             }
+
+            // 初始化时同步编辑状态
+            syncEditMode(currentTabId);
         }
 
         // 绑定事件
@@ -224,7 +255,7 @@
             btn.addEventListener('click', () => {
                 const elementType = btn.dataset.elementType;
                 if (elementType && currentTabId) {
-                    chrome.runtime.sendMessage({
+                    safeSendMessage({
                         type: 'ADD_ELEMENT',
                         payload: { tabId: currentTabId, elementType }
                     });
@@ -232,7 +263,30 @@
             });
         });
 
-        // 布局属性控件
+        // ===== Display 模式切换 =====
+        const displayModeBtns = [elements.btnDisplayBlock, elements.btnDisplayFlex, elements.btnDisplayGrid];
+        displayModeBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const mode = btn.dataset.display;
+                displayModeBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                // 切换 Flex / Grid 子选项面板的显示
+                elements.flexOptions.style.display = mode === 'flex' ? 'block' : 'none';
+                elements.gridOptions.style.display = mode === 'grid' ? 'block' : 'none';
+
+                if (mode === 'flex') {
+                    applyStyle({ display: 'flex', gridTemplateColumns: '' });
+                } else if (mode === 'grid') {
+                    applyStyle({ display: 'grid', flexDirection: '', flexWrap: '', gridTemplateColumns: 'repeat(2, 1fr)' });
+                } else {
+                    // block 模式：清除 flex/grid 相关属性
+                    applyStyle({ display: 'block', flexDirection: '', flexWrap: '', gridTemplateColumns: '' });
+                }
+            });
+        });
+
+        // ===== Flex 布局属性控件 =====
         const flexDirBtns = [elements.btnFlexRow, elements.btnFlexCol];
         flexDirBtns.forEach(btn => {
             btn.addEventListener('click', () => {
@@ -248,6 +302,20 @@
         elements.justifyContent.addEventListener('change', () => applyStyle({ justifyContent: elements.justifyContent.value }));
         elements.alignItems.addEventListener('change', () => applyStyle({ alignItems: elements.alignItems.value }));
         elements.flexWrap.addEventListener('change', () => applyStyle({ flexWrap: elements.flexWrap.value }));
+
+        // ===== Grid 布局属性控件 =====
+        document.querySelectorAll('.grid-col-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.grid-col-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const cols = btn.dataset.cols;
+                applyStyle({ gridTemplateColumns: `repeat(${cols}, 1fr)` });
+            });
+        });
+
+        elements.gridGap.addEventListener('change', () => applyStyle({ gap: elements.gridGap.value + 'px' }));
+        elements.gridGap.addEventListener('input', () => applyStyle({ gap: elements.gridGap.value + 'px' }));
+        elements.gridAlignItems.addEventListener('change', () => applyStyle({ alignItems: elements.gridAlignItems.value }));
 
         // 保存
         elements.btnSave.addEventListener('click', savePage);
@@ -266,6 +334,17 @@
             }
             // 重置面板
             showNoSelection();
+
+            // 切换 Tab 时同步编辑状态
+            syncEditMode(currentTabId);
+        });
+
+        // 监听标签页刷新或更新
+        chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+            if (tabId === currentTabId && changeInfo.status === 'complete') {
+                // 页面刷新后，编辑状态重置或由 Background 提供
+                syncEditMode(currentTabId);
+            }
         });
     }
 
@@ -290,9 +369,35 @@
             switchTab('edit');
         }
 
-        chrome.runtime.sendMessage({
+        safeSendMessage({
             type: 'TOGGLE_EDIT_MODE',
             payload: { tabId: currentTabId, isEditing }
+        });
+    }
+
+    /** 从 Background 同步当前 Tab 的编辑模式状态 */
+    function syncEditMode(tabId) {
+        if (!tabId) return;
+        safeSendMessage({
+            type: 'GET_EDIT_MODE_STATE',
+            payload: { tabId }
+        }, (response) => {
+            if (response && typeof response.isEditing === 'boolean') {
+                isEditing = response.isEditing;
+
+                elements.toggleBtn.classList.toggle('active', isEditing);
+                elements.toggleText.textContent = isEditing ? '关闭编辑模式' : '开启编辑模式';
+                elements.undoBtn.disabled = !isEditing;
+                elements.redoBtn.disabled = !isEditing;
+
+                // 显示/隐藏 Tab 栏
+                elements.tabBar.style.display = isEditing ? 'flex' : 'none';
+
+                if (!isEditing) {
+                    showNoSelection();
+                    switchTab('edit');
+                }
+            }
         });
     }
 
@@ -324,6 +429,13 @@
                 isEditing = payload.isEditing;
                 elements.toggleBtn.classList.toggle('active', isEditing);
                 elements.toggleText.textContent = isEditing ? '关闭编辑模式' : '开启编辑模式';
+                elements.undoBtn.disabled = !isEditing;
+                elements.redoBtn.disabled = !isEditing;
+                elements.tabBar.style.display = isEditing ? 'flex' : 'none';
+                if (!isEditing) {
+                    showNoSelection();
+                    switchTab('edit');
+                }
                 break;
         }
     }
@@ -352,9 +464,9 @@
         // 自动切换到编辑 Tab
         switchTab('edit');
 
-        // 检测是否为 flex 容器，显示/隐藏布局属性面板
-        const isFlex = payload.styles.display === 'flex' || payload.styles.display === 'inline-flex';
-        elements.layoutSection.style.display = isFlex ? 'block' : 'none';
+        // 检测是否为容器元素，显示/隐藏布局属性面板
+        const isContainer = payload.isContainer || false;
+        elements.layoutSection.style.display = isContainer ? 'block' : 'none';
 
         // 同步控件值
         syncControlsFromStyles(payload.styles);
@@ -443,8 +555,27 @@
         if (focused !== elements.marginBottom) elements.marginBottom.value = parseInt(styles.marginBottom) || 0;
         if (focused !== elements.marginLeft) elements.marginLeft.value = parseInt(styles.marginLeft) || 0;
 
-        // 布局属性（flex 容器时同步）
-        const isFlex = styles.display === 'flex' || styles.display === 'inline-flex';
+        // 布局属性（容器元素同步 display 模式和子选项）
+        const displayMode = styles.display || 'block';
+        const isFlex = displayMode === 'flex' || displayMode === 'inline-flex';
+        const isGrid = displayMode === 'grid' || displayMode === 'inline-grid';
+
+        // 同步 Display 模式按钮
+        const displayModeBtns = [elements.btnDisplayBlock, elements.btnDisplayFlex, elements.btnDisplayGrid];
+        displayModeBtns.forEach(btn => btn.classList.remove('active'));
+        if (isFlex) {
+            elements.btnDisplayFlex.classList.add('active');
+        } else if (isGrid) {
+            elements.btnDisplayGrid.classList.add('active');
+        } else {
+            elements.btnDisplayBlock.classList.add('active');
+        }
+
+        // 切换子选项面板
+        elements.flexOptions.style.display = isFlex ? 'block' : 'none';
+        elements.gridOptions.style.display = isGrid ? 'block' : 'none';
+
+        // Flex 选项同步
         if (isFlex) {
             const dir = styles.flexDirection || 'row';
             elements.btnFlexRow.classList.toggle('active', dir === 'row' || dir === 'row-reverse');
@@ -463,6 +594,30 @@
                 elements.flexWrap.value = styles.flexWrap || 'nowrap';
             }
         }
+
+        // Grid 选项同步
+        if (isGrid) {
+            // 解析列数
+            const gtc = styles.gridTemplateColumns || '';
+            const colMatch = gtc.match(/repeat\((\d+)/)
+                || (gtc.trim() ? { length: gtc.trim().split(/\s+/).length } : null);
+            let colCount = 1;
+            if (colMatch && colMatch[1]) {
+                colCount = parseInt(colMatch[1]);
+            } else if (gtc.trim()) {
+                colCount = gtc.trim().split(/\s+/).length;
+            }
+            document.querySelectorAll('.grid-col-btn').forEach(btn => {
+                btn.classList.toggle('active', parseInt(btn.dataset.cols) === colCount);
+            });
+
+            if (focused !== elements.gridGap) {
+                elements.gridGap.value = parseInt(styles.gap) || 0;
+            }
+            if (focused !== elements.gridAlignItems) {
+                elements.gridAlignItems.value = styles.alignItems || 'stretch';
+            }
+        }
     }
 
     // =====================================================
@@ -471,7 +626,7 @@
 
     function applyStyle(styles) {
         if (!currentTabId) return;
-        chrome.runtime.sendMessage({
+        safeSendMessage({
             type: 'APPLY_STYLE',
             payload: { tabId: currentTabId, styles }
         });
@@ -495,7 +650,7 @@
 
     function sendAction(actionType) {
         if (!currentTabId) return;
-        chrome.runtime.sendMessage({
+        safeSendMessage({
             type: actionType,
             payload: { tabId: currentTabId }
         });
@@ -503,7 +658,7 @@
 
     function sendElementAction(action) {
         if (!currentTabId) return;
-        chrome.runtime.sendMessage({
+        safeSendMessage({
             type: 'ELEMENT_ACTION',
             payload: { tabId: currentTabId, action }
         });
@@ -530,12 +685,12 @@
         }
 
         // 请求 Content Script 提供当前页面 HTML
-        chrome.runtime.sendMessage({
+        safeSendMessage({
             type: 'GET_PAGE_HTML',
             payload: { tabId: currentTabId }
         }, (response) => {
             if (response && response.html) {
-                chrome.runtime.sendMessage({
+                safeSendMessage({
                     type: 'SAVE_PAGE',
                     payload: { html: response.html, fileName }
                 });

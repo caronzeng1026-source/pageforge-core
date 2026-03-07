@@ -33,10 +33,41 @@
     let resizeStartHeight = 0;     // 缩放起始高度
     let resizeHandlesContainer = null; // 手柄容器 DOM
 
+    // 剪贴板（存储复制的元素 HTML 快照）
+    let clipboardHTML = null;
+
     // 撤销/重做历史栈
     const undoStack = [];
     const redoStack = [];
     const MAX_HISTORY = 50;
+
+    /** 安全发送扩展消息，防止 Extension context invalidated */
+    function safeSendMessage(message, callback) {
+        try {
+            if (!chrome.runtime?.id) {
+                throw new Error('Extension context invalidated.');
+            }
+            if (callback) {
+                chrome.runtime.sendMessage(message, callback);
+            } else {
+                chrome.runtime.sendMessage(message, () => {
+                    void chrome.runtime.lastError;
+                });
+            }
+        } catch (error) {
+            if (error && error.message && error.message.includes('Extension context invalidated')) {
+                // 插件被重载，清理旧的上下文 UI 和事件
+                console.warn('WebEdit: Extension context invalidated. Cleaning up...');
+                if (typeof disableEditMode === 'function') {
+                    disableEditMode();
+                }
+                document.querySelectorAll('.webedit-overlay').forEach(el => el.remove());
+                document.body.classList.remove('webedit-active', 'webedit-resizing');
+            } else {
+                console.warn('WebEdit: Failed to send message', error);
+            }
+        }
+    }
 
     // =====================================================
     // 操作历史：撤销/重做
@@ -88,7 +119,7 @@
                 break;
             case 'delete':
                 // 恢复被删除的元素
-                if (action.nextSibling) {
+                if (action.nextSibling && action.nextSibling.parentNode === action.parent) {
                     action.parent.insertBefore(action.element, action.nextSibling);
                 } else {
                     action.parent.appendChild(action.element);
@@ -96,14 +127,15 @@
                 break;
             case 'move':
                 // 撤销移动：将元素放回原位
-                if (action.oldNextSibling) {
+                if (action.oldNextSibling && action.oldNextSibling.parentNode === action.oldParent) {
                     action.oldParent.insertBefore(action.element, action.oldNextSibling);
                 } else {
                     action.oldParent.appendChild(action.element);
                 }
                 break;
             case 'add':
-                // 撤销添加：移除新插入的元素
+            case 'paste':
+                // 撤销添加/粘贴：移除新插入的元素
                 if (action.element === selectedElement) {
                     deselectElement();
                 }
@@ -120,13 +152,13 @@
                 action.element.style.flex = action.elementOldFlex;
                 action.target.style.flex = action.targetOldFlex;
                 // 将目标元素放回原位
-                if (action.targetOldNextSibling && action.targetOldParent.contains(action.targetOldNextSibling)) {
+                if (action.targetOldNextSibling && action.targetOldNextSibling.parentNode === action.targetOldParent) {
                     action.targetOldParent.insertBefore(action.target, action.targetOldNextSibling);
                 } else {
                     action.targetOldParent.appendChild(action.target);
                 }
                 // 将拖拽元素放回原位
-                if (action.elementOldNextSibling && action.elementOldParent.contains(action.elementOldNextSibling)) {
+                if (action.elementOldNextSibling && action.elementOldNextSibling.parentNode === action.elementOldParent) {
                     action.elementOldParent.insertBefore(action.element, action.elementOldNextSibling);
                 } else {
                     action.elementOldParent.appendChild(action.element);
@@ -162,15 +194,16 @@
                 break;
             case 'move':
                 // 重做移动：将元素放到新位置
-                if (action.newNextSibling) {
+                if (action.newNextSibling && action.newNextSibling.parentNode === action.newParent) {
                     action.newParent.insertBefore(action.element, action.newNextSibling);
                 } else {
                     action.newParent.appendChild(action.element);
                 }
                 break;
             case 'add':
-                // 重做添加：重新插入元素到原位置
-                if (action.nextSibling && action.parent.contains(action.nextSibling)) {
+            case 'paste':
+                // 重做添加/粘贴：重新插入元素到原位置
+                if (action.nextSibling && action.nextSibling.parentNode === action.parent) {
                     action.parent.insertBefore(action.element, action.nextSibling);
                 } else {
                     action.parent.appendChild(action.element);
@@ -189,7 +222,7 @@
                 // 重做并排包裹：重新创建容器并放入元素
                 // 将容器插入到目标元素的原位之前
                 const wrapperParent = action.targetOldParent;
-                if (action.targetOldNextSibling && wrapperParent.contains(action.targetOldNextSibling)) {
+                if (action.targetOldNextSibling && action.targetOldNextSibling.parentNode === wrapperParent) {
                     wrapperParent.insertBefore(action.wrapper, action.targetOldNextSibling);
                 } else {
                     wrapperParent.appendChild(action.wrapper);
@@ -524,6 +557,9 @@
             justifyContent: computed.justifyContent,
             alignItems: computed.alignItems,
             flexWrap: computed.flexWrap,
+
+            // 布局（grid 容器属性）
+            gridTemplateColumns: computed.gridTemplateColumns,
         };
 
         const payload = {
@@ -532,12 +568,13 @@
             path: getElementPath(element),
             textContent: element.textContent?.substring(0, 100) || '',
             hasChildren: element.children.length > 0,
+            isContainer: isContainerElement(element),
         };
 
-        chrome.runtime.sendMessage({
+        safeSendMessage({
             type: 'ELEMENT_SELECTED',
             payload
-        }).catch(() => { });
+        });
     }
 
     // =====================================================
@@ -678,6 +715,92 @@
     }
 
     // =====================================================
+    // 复制 / 粘贴
+    // =====================================================
+
+    /** 复制选中元素的 DOM 快照到内部剪贴板 */
+    function copyElement() {
+        if (!selectedElement) return;
+
+        // 克隆元素并清除 WebEdit 临时 class，保证干净快照
+        const clone = selectedElement.cloneNode(true);
+        const editClasses = [
+            'webedit-selected', 'webedit-hover', 'webedit-drag-source',
+            'webedit-drop-target', 'webedit-drop-zone', 'webedit-drop-zone-active',
+            'webedit-copy-flash'
+        ];
+        editClasses.forEach(cls => {
+            clone.classList.remove(cls);
+            clone.querySelectorAll(`.${cls}`).forEach(el => el.classList.remove(cls));
+        });
+        // 移除克隆中的 contenteditable 属性
+        clone.removeAttribute('contenteditable');
+        clone.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
+
+        clipboardHTML = clone.outerHTML;
+
+        // 视觉反馈：短暂绿色闪烁
+        selectedElement.classList.add('webedit-copy-flash');
+        setTimeout(() => {
+            selectedElement?.classList.remove('webedit-copy-flash');
+        }, 400);
+    }
+
+    /** 将剪贴板中的元素粘贴到页面 */
+    function pasteElement() {
+        if (!clipboardHTML) return;
+
+        // 从 HTML 快照创建新元素
+        const temp = document.createElement('div');
+        temp.innerHTML = clipboardHTML;
+        const newElement = temp.firstElementChild;
+        if (!newElement) return;
+
+        // 标记为 WebEdit 添加的元素
+        newElement.classList.add('webedit-added-element');
+
+        // 确定插入位置（复用 addElement 的策略）
+        let parent;
+        let nextSibling;
+        if (selectedElement && selectedElement !== document.body && selectedElement !== document.documentElement) {
+            if (isContainerElement(selectedElement)) {
+                // 容器元素：插入到内部末尾
+                parent = selectedElement;
+                nextSibling = null;
+                parent.appendChild(newElement);
+            } else {
+                // 叶子元素：在其后方插入
+                parent = selectedElement.parentElement;
+                nextSibling = selectedElement.nextSibling;
+                if (nextSibling && nextSibling.parentNode === parent) {
+                    parent.insertBefore(newElement, nextSibling);
+                } else {
+                    parent.appendChild(newElement);
+                }
+            }
+        } else {
+            // 无选中元素：插入到 body 末尾
+            parent = document.body;
+            nextSibling = null;
+            parent.appendChild(newElement);
+        }
+
+        // 记录到历史栈（支持撤销）
+        pushAction({
+            type: 'paste',
+            element: newElement,
+            parent,
+            nextSibling: newElement.nextSibling,
+        });
+
+        // 自动选中粘贴的元素
+        selectElement(newElement);
+
+        // 滚动到新元素可见区域
+        newElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // =====================================================
     // 添加元素
     // =====================================================
 
@@ -685,6 +808,20 @@
      * 向页面插入新的 DOM 元素
      * @param {string} elementType - 元素类型标识
      */
+    /**
+     * 判断元素是否为容器类元素（新元素应插入到其内部）
+     * @param {Element} element - 目标元素
+     * @returns {boolean}
+     */
+    function isContainerElement(element) {
+        const containerTags = ['DIV', 'SECTION', 'ARTICLE', 'NAV', 'MAIN', 'ASIDE', 'HEADER', 'FOOTER', 'UL', 'OL'];
+        if (containerTags.includes(element.tagName)) return true;
+        // flex / grid 布局容器也视为容器
+        const display = getComputedStyle(element).display;
+        if (display === 'flex' || display === 'inline-flex' || display === 'grid') return true;
+        return false;
+    }
+
     function addElement(elementType) {
         if (!isEditMode) return;
 
@@ -698,13 +835,20 @@
         let parent;
         let nextSibling;
         if (selectedElement && selectedElement !== document.body && selectedElement !== document.documentElement) {
-            // 有选中元素：在其后方插入
-            parent = selectedElement.parentElement;
-            nextSibling = selectedElement.nextSibling;
-            if (nextSibling) {
-                parent.insertBefore(newElement, nextSibling);
-            } else {
+            if (isContainerElement(selectedElement)) {
+                // 容器元素：插入到内部末尾
+                parent = selectedElement;
+                nextSibling = null;
                 parent.appendChild(newElement);
+            } else {
+                // 叶子元素：在其后方插入
+                parent = selectedElement.parentElement;
+                nextSibling = selectedElement.nextSibling;
+                if (nextSibling && nextSibling.parentNode === parent) {
+                    parent.insertBefore(newElement, nextSibling);
+                } else {
+                    parent.appendChild(newElement);
+                }
             }
         } else {
             // 无选中元素：插入到 body 末尾
@@ -925,6 +1069,9 @@
         dropIndicator.classList.add('webedit-drop-indicator');
         dropIndicator.style.display = 'none';
         document.body.appendChild(dropIndicator);
+
+        // 高亮所有合法放置区域
+        highlightDropZones();
     }
 
     /**
@@ -1023,6 +1170,12 @@
         } else if (parentEl && parentEl !== document.body) {
             parentEl.classList.add('webedit-drop-target');
         }
+
+        // 增强当前悬停目标的高亮（区别于其他可放置区域）
+        document.querySelectorAll('.webedit-drop-zone-active').forEach(el => {
+            el.classList.remove('webedit-drop-zone-active');
+        });
+        targetEl.classList.add('webedit-drop-zone-active');
 
         // 定位指示线
         if (dropIndicator) {
@@ -1135,6 +1288,9 @@
         document.querySelectorAll('.webedit-drop-target').forEach(el => {
             el.classList.remove('webedit-drop-target');
         });
+        document.querySelectorAll('.webedit-drop-zone-active').forEach(el => {
+            el.classList.remove('webedit-drop-zone-active');
+        });
         if (dropIndicator) {
             dropIndicator.style.display = 'none';
         }
@@ -1172,11 +1328,15 @@
         if (dropPosition === 'before') {
             newParent = dropTarget.parentElement;
             newNextSibling = dropTarget;
-            newParent.insertBefore(element, dropTarget);
+            if (dropTarget.parentNode === newParent) {
+                newParent.insertBefore(element, dropTarget);
+            } else {
+                newParent.appendChild(element);
+            }
         } else {
             newParent = dropTarget.parentElement;
             newNextSibling = dropTarget.nextSibling;
-            if (newNextSibling) {
+            if (newNextSibling && newNextSibling.parentNode === newParent) {
                 newParent.insertBefore(element, newNextSibling);
             } else {
                 newParent.appendChild(element);
@@ -1210,7 +1370,11 @@
         wrapper.style.cssText = 'display: flex; flex-direction: row; gap: 16px; padding: 0; margin: 0; min-height: 0; align-items: stretch;';
 
         // 将容器插入到目标元素原来的位置
-        targetParent.insertBefore(wrapper, target);
+        if (target.parentNode === targetParent) {
+            targetParent.insertBefore(wrapper, target);
+        } else {
+            targetParent.appendChild(wrapper);
+        }
 
         // 按照左/右顺序将元素放入容器
         if (dropPosition === 'left') {
@@ -1256,6 +1420,7 @@
         }
 
         clearDropTarget();
+        clearDropZones();
 
         if (dropIndicator) {
             dropIndicator.remove();
@@ -1266,6 +1431,118 @@
         isDragging = false;
         dragStarted = false;
         dragElement = null;
+    }
+
+    // =====================================================
+    // 拖拽放置区域可视化提示
+    // =====================================================
+
+    /**
+     * 收集所有合法放置目标元素
+     * 策略：从 document.body 出发，递归扫描所有可见的块级元素；
+     * 排除被拖拽元素自身及其子孙、WebEdit UI 元素。
+     * @param {Element} dragEl - 正在被拖拽的元素
+     * @returns {Set<Element>} 合法放置目标集合
+     */
+    function collectDropZones(dragEl) {
+        const zones = new Set();
+        if (!dragEl) return zones;
+
+        // 不应被高亮的标签（内联元素、脚本、样式等）
+        const skipTags = new Set([
+            'SCRIPT', 'STYLE', 'LINK', 'META', 'NOSCRIPT', 'BR', 'HR',
+            'IFRAME', 'OBJECT', 'EMBED', 'SVG', 'CANVAS', 'VIDEO', 'AUDIO',
+        ]);
+
+        /**
+         * 判断元素是否在视口附近可见（含上下各一屏缓冲）
+         */
+        function isNearViewport(el) {
+            const rect = el.getBoundingClientRect();
+            const buffer = window.innerHeight;
+            // 元素完全在视口上方/下方超出缓冲区则不可见
+            if (rect.bottom < -buffer || rect.top > window.innerHeight + buffer) return false;
+            // 元素尺寸为零则不可见
+            if (rect.width === 0 && rect.height === 0) return false;
+            return true;
+        }
+
+        /**
+         * 判断元素是否为合法放置目标（可见的块级元素）
+         */
+        function isDroppable(el) {
+            if (!el || el === document.body || el === document.documentElement) return false;
+            if (skipTags.has(el.tagName)) return false;
+            // 隐藏元素跳过
+            const style = getComputedStyle(el);
+            if (style.display === 'none' || style.visibility === 'hidden') return false;
+            const display = style.display;
+            return display === 'block' || display === 'flex' || display === 'inline-flex' ||
+                display === 'grid' || display === 'list-item' || display === 'table' ||
+                display === 'inline-block' || display === 'flow-root';
+        }
+
+        /**
+         * 从 body 开始递归收集
+         */
+        function scan(parent) {
+            for (const child of parent.children) {
+                // 跳过被拖拽的元素及其子元素
+                if (child === dragEl || dragEl.contains(child)) continue;
+                // 跳过包含被拖拽元素的祖先（但继续扫描其子级）
+                if (child.contains(dragEl)) {
+                    scan(child);
+                    continue;
+                }
+                // 跳过 WebEdit 自身的 UI 元素
+                if (child.classList.contains('webedit-overlay') ||
+                    child.classList.contains('webedit-drag-ghost') ||
+                    child.classList.contains('webedit-drop-indicator') ||
+                    child.classList.contains('webedit-resize-handles')) continue;
+                // 跳过不应高亮的标签
+                if (skipTags.has(child.tagName)) continue;
+
+                // 性能优化：只处理视口附近的元素
+                if (!isNearViewport(child)) continue;
+
+                if (isDroppable(child)) {
+                    zones.add(child);
+                }
+
+                // 继续递归子级（捕获嵌套的块级元素）
+                if (child.children.length > 0) {
+                    scan(child);
+                }
+            }
+        }
+
+        scan(document.body);
+        return zones;
+    }
+
+    /**
+     * 高亮所有合法放置区域
+     * 在 startDrag 中调用，为用户提供全局可放置位置的视觉提示
+     */
+    function highlightDropZones() {
+        if (!dragElement) return;
+        const zones = collectDropZones(dragElement);
+        zones.forEach(el => {
+            el.classList.add('webedit-drop-zone');
+        });
+    }
+
+    /**
+     * 清除所有放置区域的高亮
+     * 在 endDrag 中调用
+     */
+    function clearDropZones() {
+        document.querySelectorAll('.webedit-drop-zone').forEach(el => {
+            el.classList.remove('webedit-drop-zone');
+        });
+        document.querySelectorAll('.webedit-drop-zone-active').forEach(el => {
+            el.classList.remove('webedit-drop-zone-active');
+        });
     }
 
     // =====================================================
@@ -1339,6 +1616,20 @@
             return;
         }
 
+        // Ctrl/Cmd + C = 复制选中元素
+        if ((event.ctrlKey || event.metaKey) && event.key === 'c' && selectedElement) {
+            event.preventDefault();
+            copyElement();
+            return;
+        }
+
+        // Ctrl/Cmd + V = 粘贴元素
+        if ((event.ctrlKey || event.metaKey) && event.key === 'v' && clipboardHTML) {
+            event.preventDefault();
+            pasteElement();
+            return;
+        }
+
         // Delete / Backspace = 删除选中元素
         if ((event.key === 'Delete' || event.key === 'Backspace') && selectedElement) {
             event.preventDefault();
@@ -1366,7 +1657,8 @@
             'webedit-active', 'webedit-hover', 'webedit-selected', 'webedit-hidden-element',
             'webedit-dragging', 'webedit-drag-source', 'webedit-drag-ghost',
             'webedit-drop-indicator', 'webedit-drop-target', 'webedit-added-element',
-            'webedit-flex-container'
+            'webedit-flex-container', 'webedit-drop-zone', 'webedit-drop-zone-active',
+            'webedit-copy-flash'
         ];
         const elementsWithEditClasses = [];
 
@@ -1438,6 +1730,16 @@
 
             case 'ADD_ELEMENT':
                 addElement(payload.elementType);
+                sendResponse({ success: true });
+                break;
+
+            case 'COPY_ELEMENT':
+                copyElement();
+                sendResponse({ success: true });
+                break;
+
+            case 'PASTE_ELEMENT':
+                pasteElement();
                 sendResponse({ success: true });
                 break;
 

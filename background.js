@@ -22,7 +22,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const tabId = payload.tabId;
       const isEditing = payload.isEditing;
       tabEditState.set(tabId, isEditing);
-      chrome.tabs.sendMessage(tabId, { type: 'SET_EDIT_MODE', payload: { isEditing } });
+      chrome.tabs.sendMessage(tabId, { type: 'SET_EDIT_MODE', payload: { isEditing } }, () => void chrome.runtime.lastError);
       sendResponse({ success: true });
       break;
     }
@@ -32,7 +32,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       chrome.tabs.sendMessage(payload.tabId, {
         type: 'APPLY_STYLE',
         payload: payload.styles
-      });
+      }, () => void chrome.runtime.lastError);
       sendResponse({ success: true });
       break;
     }
@@ -42,7 +42,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       chrome.tabs.sendMessage(payload.tabId, {
         type: 'ELEMENT_ACTION',
         payload: { action: payload.action }
-      });
+      }, () => void chrome.runtime.lastError);
       sendResponse({ success: true });
       break;
     }
@@ -52,7 +52,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       chrome.tabs.sendMessage(payload.tabId, {
         type: 'ADD_ELEMENT',
         payload: { elementType: payload.elementType }
-      });
+      }, () => void chrome.runtime.lastError);
       sendResponse({ success: true });
       break;
     }
@@ -60,7 +60,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Side Panel → Content Script：撤销/重做
     case 'UNDO':
     case 'REDO': {
-      chrome.tabs.sendMessage(payload.tabId, { type, payload: {} });
+      chrome.tabs.sendMessage(payload.tabId, { type, payload: {} }, () => void chrome.runtime.lastError);
       sendResponse({ success: true });
       break;
     }
@@ -71,9 +71,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       chrome.runtime.sendMessage({
         type: 'ELEMENT_SELECTED',
         payload: message.payload
-      }).catch(() => {
-        // Side Panel 可能未打开，忽略错误
-      });
+      }, () => void chrome.runtime.lastError);
       sendResponse({ success: true });
       break;
     }
@@ -83,15 +81,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       chrome.runtime.sendMessage({
         type: 'EDIT_MODE_CHANGED',
         payload: message.payload
-      }).catch(() => { });
+      }, () => void chrome.runtime.lastError);
       sendResponse({ success: true });
+      break;
+    }
+
+    // Side Panel -> Background: 获取特定 tab 的编辑状态
+    case 'GET_EDIT_MODE_STATE': {
+      const isEditing = tabEditState.get(payload.tabId) || false;
+      sendResponse({ isEditing });
       break;
     }
 
     // Side Panel → Content Script：获取页面 HTML（用于保存）
     case 'GET_PAGE_HTML': {
       chrome.tabs.sendMessage(payload.tabId, { type: 'GET_PAGE_HTML', payload: {} }, (response) => {
-        sendResponse(response);
+        if (chrome.runtime.lastError) {
+          sendResponse({ html: null });
+        } else {
+          sendResponse(response);
+        }
       });
       return true; // 异步响应
     }
@@ -124,4 +133,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // 清理已关闭 tab 的状态
 chrome.tabs.onRemoved.addListener((tabId) => {
   tabEditState.delete(tabId);
+});
+
+// 清理导航更新/刷新的 tab 状态
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.status === 'loading') {
+    tabEditState.set(tabId, false);
+  }
 });

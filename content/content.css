@@ -264,3 +264,42 @@ body.webedit-active .webedit-flex-container::before {
   pointer-events: none;
   z-index: 1;
 }
+
+/* ===== 拖拽放置区域可视化提示 ===== */
+
+/* 所有合法放置目标的淡蓝色提示（拖拽开始时生效） */
+.webedit-drop-zone {
+  outline: 2px dashed rgba(59, 130, 246, 0.35) !important;
+  outline-offset: -2px !important;
+  background-color: rgba(59, 130, 246, 0.04) !important;
+  transition: all 0.2s ease !important;
+}
+
+/* 当前鼠标悬停的放置目标 - 增强高亮 */
+.webedit-drop-zone-active {
+  outline: 2px solid rgba(16, 185, 129, 0.8) !important;
+  outline-offset: -2px !important;
+  background-color: rgba(16, 185, 129, 0.08) !important;
+  box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.3),
+    0 0 12px rgba(16, 185, 129, 0.15) !important;
+  transition: all 0.15s ease !important;
+}
+
+/* ===== 复制反馈动画 ===== */
+
+/* 复制成功时的绿色闪烁提示 */
+@keyframes webedit-copyFlash {
+  0% {
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.7) !important;
+    outline-color: rgba(16, 185, 129, 0.9) !important;
+  }
+
+  100% {
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15) !important;
+    outline-color: rgba(59, 130, 246, 0.9) !important;
+  }
+}
+
+.webedit-copy-flash {
+  animation: webedit-copyFlash 0.4s ease !important;
+}

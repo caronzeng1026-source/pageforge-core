@@ -315,7 +315,7 @@
           </div>
         </div>
 
-        <!-- 布局属性区（仅 flex 容器显示） -->
+        <!-- 布局属性区（容器元素显示） -->
         <div class="panel-section" id="layout-section" style="display: none;">
           <div class="section-header">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -327,62 +327,123 @@
             <span>布局</span>
           </div>
           <div class="section-body">
-            <!-- 方向 -->
+            <!-- Display 模式切换 -->
             <div class="control-row">
-              <label>方向</label>
+              <label>模式</label>
               <div class="btn-group">
-                <button class="style-btn" id="btn-flex-row" title="横向排列" data-direction="row">
+                <button class="style-btn display-mode-btn" id="btn-display-block" title="常规布局" data-display="block">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                  </svg>
+                </button>
+                <button class="style-btn display-mode-btn" id="btn-display-flex" title="弹性布局" data-display="flex">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="3" y="5" width="7" height="14" rx="1" />
                     <rect x="14" y="5" width="7" height="14" rx="1" />
                   </svg>
                 </button>
-                <button class="style-btn" id="btn-flex-col" title="纵向排列" data-direction="column">
+                <button class="style-btn display-mode-btn" id="btn-display-grid" title="网格布局" data-display="grid">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="5" y="3" width="14" height="7" rx="1" />
-                    <rect x="5" y="14" width="14" height="7" rx="1" />
+                    <rect x="3" y="3" width="7" height="7" />
+                    <rect x="14" y="3" width="7" height="7" />
+                    <rect x="3" y="14" width="7" height="7" />
+                    <rect x="14" y="14" width="7" height="7" />
                   </svg>
                 </button>
               </div>
             </div>
-            <!-- 间距 -->
-            <div class="control-row">
-              <label>间距</label>
-              <div class="input-with-unit">
-                <input type="number" id="flex-gap" class="number-input" min="0" max="200" step="1" placeholder="16">
-                <span class="unit">px</span>
+
+            <!-- ===== Flex 选项 ===== -->
+            <div id="flex-options" style="display: none;">
+              <!-- 方向 -->
+              <div class="control-row">
+                <label>方向</label>
+                <div class="btn-group">
+                  <button class="style-btn" id="btn-flex-row" title="横向排列" data-direction="row">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="3" y="5" width="7" height="14" rx="1" />
+                      <rect x="14" y="5" width="7" height="14" rx="1" />
+                    </svg>
+                  </button>
+                  <button class="style-btn" id="btn-flex-col" title="纵向排列" data-direction="column">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="5" y="3" width="14" height="7" rx="1" />
+                      <rect x="5" y="14" width="14" height="7" rx="1" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <!-- 间距 -->
+              <div class="control-row">
+                <label>间距</label>
+                <div class="input-with-unit">
+                  <input type="number" id="flex-gap" class="number-input" min="0" max="200" step="1" placeholder="16">
+                  <span class="unit">px</span>
+                </div>
+              </div>
+              <!-- 主轴对齐 -->
+              <div class="control-row">
+                <label>主轴</label>
+                <select id="justify-content" class="select-input">
+                  <option value="flex-start">起始</option>
+                  <option value="center">居中</option>
+                  <option value="flex-end">末尾</option>
+                  <option value="space-between">两端</option>
+                  <option value="space-around">环绕</option>
+                  <option value="space-evenly">均匀</option>
+                </select>
+              </div>
+              <!-- 交叉轴对齐 -->
+              <div class="control-row">
+                <label>交叉轴</label>
+                <select id="align-items" class="select-input">
+                  <option value="stretch">拉伸</option>
+                  <option value="flex-start">起始</option>
+                  <option value="center">居中</option>
+                  <option value="flex-end">末尾</option>
+                  <option value="baseline">基线</option>
+                </select>
+              </div>
+              <!-- 换行 -->
+              <div class="control-row">
+                <label>换行</label>
+                <select id="flex-wrap" class="select-input">
+                  <option value="nowrap">不换行</option>
+                  <option value="wrap">换行</option>
+                </select>
               </div>
             </div>
-            <!-- 主轴对齐 -->
-            <div class="control-row">
-              <label>主轴</label>
-              <select id="justify-content" class="select-input">
-                <option value="flex-start">起始</option>
-                <option value="center">居中</option>
-                <option value="flex-end">末尾</option>
-                <option value="space-between">两端</option>
-                <option value="space-around">环绕</option>
-                <option value="space-evenly">均匀</option>
-              </select>
-            </div>
-            <!-- 交叉轴对齐 -->
-            <div class="control-row">
-              <label>交叉轴</label>
-              <select id="align-items" class="select-input">
-                <option value="stretch">拉伸</option>
-                <option value="flex-start">起始</option>
-                <option value="center">居中</option>
-                <option value="flex-end">末尾</option>
-                <option value="baseline">基线</option>
-              </select>
-            </div>
-            <!-- 换行 -->
-            <div class="control-row">
-              <label>换行</label>
-              <select id="flex-wrap" class="select-input">
-                <option value="nowrap">不换行</option>
-                <option value="wrap">换行</option>
-              </select>
+
+            <!-- ===== Grid 选项 ===== -->
+            <div id="grid-options" style="display: none;">
+              <!-- 列数 -->
+              <div class="control-row">
+                <label>列数</label>
+                <div class="btn-group">
+                  <button class="style-btn grid-col-btn" data-cols="1" title="1列">1</button>
+                  <button class="style-btn grid-col-btn" data-cols="2" title="2列">2</button>
+                  <button class="style-btn grid-col-btn" data-cols="3" title="3列">3</button>
+                  <button class="style-btn grid-col-btn" data-cols="4" title="4列">4</button>
+                </div>
+              </div>
+              <!-- 间距 -->
+              <div class="control-row">
+                <label>间距</label>
+                <div class="input-with-unit">
+                  <input type="number" id="grid-gap" class="number-input" min="0" max="200" step="1" placeholder="16">
+                  <span class="unit">px</span>
+                </div>
+              </div>
+              <!-- 对齐 -->
+              <div class="control-row">
+                <label>对齐</label>
+                <select id="grid-align-items" class="select-input">
+                  <option value="stretch">拉伸</option>
+                  <option value="start">起始</option>
+                  <option value="center">居中</option>
+                  <option value="end">末尾</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>

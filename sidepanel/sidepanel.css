@@ -749,3 +749,40 @@ body {
     background: rgba(139, 92, 246, 0.12) !important;
     box-shadow: 0 2px 8px rgba(139, 92, 246, 0.15) !important;
 }
+
+/* ==================== Display 模式按钮 ==================== */
+
+.display-mode-btn.active[data-display="flex"] {
+    background: var(--accent);
+    color: #fff;
+}
+
+.display-mode-btn.active[data-display="grid"] {
+    background: var(--success);
+    color: #fff;
+}
+
+.display-mode-btn.active[data-display="block"] {
+    background: var(--bg-active);
+    color: var(--text-primary);
+}
+
+/* ==================== Grid 列数按钮 ==================== */
+
+.grid-col-btn {
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    min-width: 28px;
+}
+
+.grid-col-btn.active {
+    background: var(--success) !important;
+    color: #fff !important;
+}
+
+/* ==================== 布局子选项面板动画 ==================== */
+
+#flex-options,
+#grid-options {
+    animation: fadeIn 0.2s ease;
+}
