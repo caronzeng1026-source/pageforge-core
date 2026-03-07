@@ -735,3 +735,17 @@ body {
 .edit-panels {
     animation: fadeIn 0.2s ease;
 }
+
+/* ==================== 布局按钮特殊样式 ==================== */
+
+.add-element-layout {
+    border-color: rgba(139, 92, 246, 0.2) !important;
+    background: rgba(139, 92, 246, 0.05) !important;
+}
+
+.add-element-layout:hover {
+    border-color: rgba(139, 92, 246, 0.6) !important;
+    color: #8b5cf6 !important;
+    background: rgba(139, 92, 246, 0.12) !important;
+    box-shadow: 0 2px 8px rgba(139, 92, 246, 0.15) !important;
+}

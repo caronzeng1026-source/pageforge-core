@@ -230,3 +230,37 @@ body.webedit-resizing,
 body.webedit-resizing * {
   user-select: none !important;
 }
+
+/* ===== 布局容器相关样式 ===== */
+
+/* 竖向放置指示线（用于横向 flex 容器内拖放） */
+.webedit-drop-indicator-vertical {
+  /* 覆盖横向指示线的 left/right 展开规则 */
+  left: auto !important;
+  right: auto !important;
+  background: linear-gradient(180deg, transparent, #3b82f6, #3b82f6, transparent) !important;
+}
+
+/* 编辑模式下 Flex 布局容器的视觉标记 */
+body.webedit-active .webedit-flex-container {
+  outline: 2px dashed rgba(139, 92, 246, 0.4) !important;
+  outline-offset: 2px !important;
+  position: relative;
+}
+
+/* 容器角落的标签提示 */
+body.webedit-active .webedit-flex-container::before {
+  content: 'Layout';
+  position: absolute;
+  top: -10px;
+  left: 8px;
+  padding: 1px 6px;
+  background: rgba(139, 92, 246, 0.8);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 3px;
+  line-height: 1.4;
+  pointer-events: none;
+  z-index: 1;
+}

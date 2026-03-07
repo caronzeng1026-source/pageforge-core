@@ -114,6 +114,26 @@
                 action.element.style.width = action.oldWidth;
                 action.element.style.height = action.oldHeight;
                 break;
+            case 'wrap-move':
+                // 撤销并排包裹：将元素从容器中取出放回原位，移除容器
+                // 恢复 flex 样式
+                action.element.style.flex = action.elementOldFlex;
+                action.target.style.flex = action.targetOldFlex;
+                // 将目标元素放回原位
+                if (action.targetOldNextSibling && action.targetOldParent.contains(action.targetOldNextSibling)) {
+                    action.targetOldParent.insertBefore(action.target, action.targetOldNextSibling);
+                } else {
+                    action.targetOldParent.appendChild(action.target);
+                }
+                // 将拖拽元素放回原位
+                if (action.elementOldNextSibling && action.elementOldParent.contains(action.elementOldNextSibling)) {
+                    action.elementOldParent.insertBefore(action.element, action.elementOldNextSibling);
+                } else {
+                    action.elementOldParent.appendChild(action.element);
+                }
+                // 移除空的 flex 容器
+                action.wrapper.remove();
+                break;
         }
         // 同步更新 Side Panel 的样式面板
         if (action.element === selectedElement) {
@@ -165,6 +185,29 @@
                     updateResizeHandles();
                 }
                 break;
+            case 'wrap-move': {
+                // 重做并排包裹：重新创建容器并放入元素
+                // 将容器插入到目标元素的原位之前
+                const wrapperParent = action.targetOldParent;
+                if (action.targetOldNextSibling && wrapperParent.contains(action.targetOldNextSibling)) {
+                    wrapperParent.insertBefore(action.wrapper, action.targetOldNextSibling);
+                } else {
+                    wrapperParent.appendChild(action.wrapper);
+                }
+                // 注意：此时 wrapper 已经在上面 insertBefore 前面了，
+                // 接下来把 target 放在 wrapper 前面（它会替代 target 的位置）
+                // 实际上应该先 insert wrapper 到 target 位置，然后 appendChild target 和 element
+                if (action.position === 'left') {
+                    action.wrapper.appendChild(action.element);
+                    action.wrapper.appendChild(action.target);
+                } else {
+                    action.wrapper.appendChild(action.target);
+                    action.wrapper.appendChild(action.element);
+                }
+                action.element.style.flex = '1';
+                action.target.style.flex = '1';
+                break;
+            }
         }
         if (action.element === selectedElement) {
             sendElementStyles(selectedElement);
@@ -474,6 +517,13 @@
             // 其他
             opacity: computed.opacity,
             display: computed.display,
+
+            // 布局（flex 容器属性）
+            flexDirection: computed.flexDirection,
+            gap: computed.gap,
+            justifyContent: computed.justifyContent,
+            alignItems: computed.alignItems,
+            flexWrap: computed.flexWrap,
         };
 
         const payload = {
@@ -749,6 +799,42 @@
                 });
                 break;
 
+            case 'flex-row': {
+                // 横向布局容器：两个子元素并排排列
+                el = document.createElement('div');
+                el.classList.add('webedit-flex-container');
+                el.style.cssText = 'display: flex; flex-direction: row; gap: 16px; padding: 16px; margin: 8px 0; min-height: 80px; border-radius: 8px;';
+                const rowChild1 = document.createElement('div');
+                rowChild1.style.cssText = 'flex: 1; min-height: 60px; padding: 16px; background: rgba(59,130,246,0.08); border: 1px dashed rgba(59,130,246,0.3); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #6b7280; font-size: 14px;';
+                rowChild1.textContent = '左侧区域';
+                rowChild1.classList.add('webedit-added-element');
+                const rowChild2 = document.createElement('div');
+                rowChild2.style.cssText = 'flex: 1; min-height: 60px; padding: 16px; background: rgba(16,185,129,0.08); border: 1px dashed rgba(16,185,129,0.3); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #6b7280; font-size: 14px;';
+                rowChild2.textContent = '右侧区域';
+                rowChild2.classList.add('webedit-added-element');
+                el.appendChild(rowChild1);
+                el.appendChild(rowChild2);
+                break;
+            }
+
+            case 'flex-col': {
+                // 纵向布局容器：两个子元素上下排列
+                el = document.createElement('div');
+                el.classList.add('webedit-flex-container');
+                el.style.cssText = 'display: flex; flex-direction: column; gap: 16px; padding: 16px; margin: 8px 0; min-height: 80px; border-radius: 8px;';
+                const colChild1 = document.createElement('div');
+                colChild1.style.cssText = 'flex: 1; min-height: 60px; padding: 16px; background: rgba(139,92,246,0.08); border: 1px dashed rgba(139,92,246,0.3); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #6b7280; font-size: 14px;';
+                colChild1.textContent = '上方区域';
+                colChild1.classList.add('webedit-added-element');
+                const colChild2 = document.createElement('div');
+                colChild2.style.cssText = 'flex: 1; min-height: 60px; padding: 16px; background: rgba(245,158,11,0.08); border: 1px dashed rgba(245,158,11,0.3); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #6b7280; font-size: 14px;';
+                colChild2.textContent = '下方区域';
+                colChild2.classList.add('webedit-added-element');
+                el.appendChild(colChild1);
+                el.appendChild(colChild2);
+                break;
+            }
+
             default:
                 return null;
         }
@@ -841,6 +927,27 @@
         document.body.appendChild(dropIndicator);
     }
 
+    /**
+     * 判断一个元素是否为 flex 容器
+     * @param {Element} el - 目标元素
+     * @returns {boolean}
+     */
+    function isFlexContainer(el) {
+        if (!el || el === document.body || el === document.documentElement) return false;
+        const display = getComputedStyle(el).display;
+        return display === 'flex' || display === 'inline-flex';
+    }
+
+    /**
+     * 获取 flex 容器的主轴方向
+     * @param {Element} el - flex 容器元素
+     * @returns {'row' | 'column'}
+     */
+    function getFlexDirection(el) {
+        const dir = getComputedStyle(el).flexDirection;
+        return (dir === 'row' || dir === 'row-reverse') ? 'row' : 'column';
+    }
+
     /** 更新放置目标和指示线位置 */
     function updateDropTarget(event) {
         // 临时隐藏幽灵和指示线，以获取鼠标下方的真实元素
@@ -864,17 +971,43 @@
             return;
         }
 
-        // 确定要插入的参考元素（向上找到与拖拽元素同级别的元素）
+        // 确定要插入的参考元素
         let targetEl = findDropSibling(elementBelow);
         if (!targetEl || targetEl === dragElement || dragElement.contains(targetEl) || targetEl.contains(dragElement)) {
             clearDropTarget();
             return;
         }
 
-        // 计算放在目标元素的前面还是后面
+        // 判断目标所在的父容器是否为横向 flex 容器
+        const parentEl = targetEl.parentElement;
+        const parentIsFlex = parentEl && isFlexContainer(parentEl);
+        const flexDir = parentIsFlex ? getFlexDirection(parentEl) : null;
+        const isHorizontalFlex = flexDir === 'row';
+
         const targetRect = targetEl.getBoundingClientRect();
-        const midY = targetRect.top + targetRect.height / 2;
-        const position = event.clientY < midY ? 'before' : 'after';
+        let position;
+
+        if (isHorizontalFlex) {
+            // 已经在横向 flex 容器内 → 左右排列
+            const midX = targetRect.left + targetRect.width / 2;
+            position = event.clientX < midX ? 'before' : 'after';
+        } else {
+            // 非 flex 容器（普通文档流）→ 检测是否在左/右边缘区域
+            const edgeZone = Math.max(targetRect.width * 0.25, 40); // 左右各 25%，最少 40px
+            const relativeX = event.clientX - targetRect.left;
+
+            if (relativeX < edgeZone) {
+                // 鼠标在目标元素的左侧区域 → 并排放置（自动创建 flex 容器）
+                position = 'left';
+            } else if (relativeX > targetRect.width - edgeZone) {
+                // 鼠标在目标元素的右侧区域 → 并排放置
+                position = 'right';
+            } else {
+                // 鼠标在中间区域 → 传统的上下插入
+                const midY = targetRect.top + targetRect.height / 2;
+                position = event.clientY < midY ? 'before' : 'after';
+            }
+        }
 
         // 如果目标和位置没变，不做多余更新
         if (dropTarget === targetEl && dropPosition === position) return;
@@ -883,21 +1016,43 @@
         dropTarget = targetEl;
         dropPosition = position;
 
-        // 高亮目标的父容器
-        if (targetEl.parentElement && targetEl.parentElement !== document.body) {
-            targetEl.parentElement.classList.add('webedit-drop-target');
+        // 高亮目标
+        if (position === 'left' || position === 'right') {
+            // 并排模式：高亮目标元素本身
+            targetEl.classList.add('webedit-drop-target');
+        } else if (parentEl && parentEl !== document.body) {
+            parentEl.classList.add('webedit-drop-target');
         }
 
         // 定位指示线
         if (dropIndicator) {
             const scrollTop = window.scrollY || document.documentElement.scrollTop;
             const scrollLeft = window.scrollX || document.documentElement.scrollLeft;
-            const indicatorY = position === 'before'
-                ? targetRect.top + scrollTop - 1
-                : targetRect.bottom + scrollTop + 1;
-            dropIndicator.style.top = indicatorY + 'px';
-            dropIndicator.style.left = (targetRect.left + scrollLeft) + 'px';
-            dropIndicator.style.width = targetRect.width + 'px';
+
+            if (isHorizontalFlex || position === 'left' || position === 'right') {
+                // 竖向指示线（横向 flex 内 或 并排模式）
+                let indicatorX;
+                if (position === 'left' || position === 'before') {
+                    indicatorX = targetRect.left + scrollLeft - 2;
+                } else {
+                    indicatorX = targetRect.right + scrollLeft + 2;
+                }
+                dropIndicator.style.top = (targetRect.top + scrollTop) + 'px';
+                dropIndicator.style.left = indicatorX + 'px';
+                dropIndicator.style.width = '3px';
+                dropIndicator.style.height = targetRect.height + 'px';
+                dropIndicator.classList.add('webedit-drop-indicator-vertical');
+            } else {
+                // 横向指示线（默认，用于纵向布局）
+                const indicatorY = position === 'before'
+                    ? targetRect.top + scrollTop - 1
+                    : targetRect.bottom + scrollTop + 1;
+                dropIndicator.style.top = indicatorY + 'px';
+                dropIndicator.style.left = (targetRect.left + scrollLeft) + 'px';
+                dropIndicator.style.width = targetRect.width + 'px';
+                dropIndicator.style.height = '3px';
+                dropIndicator.classList.remove('webedit-drop-indicator-vertical');
+            }
             dropIndicator.style.display = 'block';
         }
     }
@@ -905,16 +1060,44 @@
     /**
      * 查找合适的放置目标元素
      * 策略：
-     * 1. 优先找与被拖拽元素同一父容器下的兄弟
-     * 2. 跨容器拖放时，找鼠标下方最近的块级元素
-     * 3. 过滤掉被拖拽元素的祖先（不能把自己放进自己里面）
+     * 1. 优先查找 flex 容器内的子元素（支持拖入容器）
+     * 2. 搜索同一父容器内的兄弟元素
+     * 3. 跨容器拖放时，找鼠标下方最近的块级元素
+     * 4. 过滤掉被拖拽元素的祖先（不能把自己放进自己里面）
      */
     function findDropSibling(el) {
         if (!el || el === document.body || el === document.documentElement) return null;
 
-        // 第 1 步：搜索同一父容器内的兄弟元素（向上遍历鼠标下方元素的祖先链）
         const dragParent = dragElement.parentElement;
+
+        // 第 1 步：检查鼠标下方元素的祖先链中是否有 flex 容器（优先支持拖入容器）
         let current = el;
+        while (current && current !== document.body) {
+            // 安全检查：不能拖入自身或包含自身的容器
+            if (current === dragElement || current.contains(dragElement)) {
+                current = current.parentElement;
+                continue;
+            }
+
+            // 如果 current 的父元素是 flex 容器，则 current 可作为容器内的放置参照
+            if (current.parentElement && isFlexContainer(current.parentElement) &&
+                current.parentElement !== dragElement && !current.parentElement.contains(dragElement) &&
+                current !== dragElement) {
+                return current;
+            }
+
+            // 如果 current 本身是空的 flex 容器，允许拖入（作为容器的唯一/最后一个子元素）
+            if (isFlexContainer(current) && current.children.length === 0 &&
+                current !== dragElement && !current.contains(dragElement)) {
+                // 在 updateDropTarget 中需特殊处理空容器的情况
+                return current;
+            }
+
+            current = current.parentElement;
+        }
+
+        // 第 2 步：搜索同一父容器内的兄弟元素（向上遍历鼠标下方元素的祖先链）
+        current = el;
         while (current && current !== document.body) {
             if (current.parentElement === dragParent && current !== dragElement) {
                 return current;
@@ -922,11 +1105,9 @@
             current = current.parentElement;
         }
 
-        // 第 2 步：跨容器拖放 —— 找鼠标下方最近的合适元素
-        // 从鼠标下方的元素开始，向上查找第一个块级元素
+        // 第 3 步：跨容器拖放 —— 找鼠标下方最近的合适块级元素
         current = el;
         while (current && current !== document.body) {
-            // 关键检查：跳过 dragElement 的祖先链（不能把元素放进自己的父/祖容器里）
             if (current === dragElement || current.contains(dragElement)) {
                 current = current.parentElement;
                 continue;
@@ -941,7 +1122,7 @@
             current = current.parentElement;
         }
 
-        // 第 3 步：最终回退，如果鼠标下方元素本身不是 dragElement 也不包含它
+        // 第 4 步：最终回退
         if (el !== dragElement && !el.contains(dragElement)) {
             return el;
         }
@@ -978,6 +1159,13 @@
         const oldParent = element.parentElement;
         const oldNextSibling = element.nextSibling;
 
+        // 并排模式：自动创建 flex 容器包裹目标和拖拽元素
+        if (dropPosition === 'left' || dropPosition === 'right') {
+            executeWrapDrop(element, oldParent, oldNextSibling);
+            return;
+        }
+
+        // 普通模式：标准 DOM 移动（before/after）
         let newParent;
         let newNextSibling;
 
@@ -1003,6 +1191,55 @@
             oldNextSibling,
             newParent,
             newNextSibling: dropPosition === 'before' ? dropTarget : newNextSibling,
+        });
+    }
+
+    /**
+     * 执行并排放置：创建 flex 容器包裹目标和拖拽元素
+     * 这会将 dropTarget 从原位置取出，用一个新的 flex-row 容器替代，
+     * 然后将 dropTarget 和 dragElement 作为子元素放入容器中。
+     */
+    function executeWrapDrop(element, oldParent, oldNextSibling) {
+        const target = dropTarget;
+        const targetParent = target.parentElement;
+        const targetNextSibling = target.nextSibling;
+
+        // 创建 flex-row 容器
+        const wrapper = document.createElement('div');
+        wrapper.classList.add('webedit-flex-container', 'webedit-added-element');
+        wrapper.style.cssText = 'display: flex; flex-direction: row; gap: 16px; padding: 0; margin: 0; min-height: 0; align-items: stretch;';
+
+        // 将容器插入到目标元素原来的位置
+        targetParent.insertBefore(wrapper, target);
+
+        // 按照左/右顺序将元素放入容器
+        if (dropPosition === 'left') {
+            wrapper.appendChild(element);
+            wrapper.appendChild(target);
+        } else {
+            wrapper.appendChild(target);
+            wrapper.appendChild(element);
+        }
+
+        // 为子元素添加 flex: 1 使其等宽分布
+        element.style.flex = '1';
+        target.style.flex = '1';
+
+        // 记录复合操作到历史栈（支持撤销）
+        pushAction({
+            type: 'wrap-move',
+            element,               // 被拖拽的元素
+            target,                 // 目标元素（被包裹的）
+            wrapper,                // 新创建的 flex 容器
+            position: dropPosition, // 'left' 或 'right'
+            // 用于撤销时恢复原始位置
+            elementOldParent: oldParent,
+            elementOldNextSibling: oldNextSibling,
+            targetOldParent: targetParent,
+            targetOldNextSibling: targetNextSibling,
+            // 记录添加的 flex 样式，撤销时需移除
+            elementOldFlex: element.style.getPropertyValue('flex') || '',
+            targetOldFlex: target.style.getPropertyValue('flex') || '',
         });
     }
 
@@ -1128,7 +1365,8 @@
         const editClasses = [
             'webedit-active', 'webedit-hover', 'webedit-selected', 'webedit-hidden-element',
             'webedit-dragging', 'webedit-drag-source', 'webedit-drag-ghost',
-            'webedit-drop-indicator', 'webedit-drop-target', 'webedit-added-element'
+            'webedit-drop-indicator', 'webedit-drop-target', 'webedit-added-element',
+            'webedit-flex-container'
         ];
         const elementsWithEditClasses = [];
 

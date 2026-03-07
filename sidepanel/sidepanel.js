@@ -75,6 +75,15 @@
         tabBar: document.getElementById('tab-bar'),
         tabEdit: document.getElementById('tab-edit'),
         tabInsert: document.getElementById('tab-insert'),
+
+        // 布局属性
+        layoutSection: document.getElementById('layout-section'),
+        btnFlexRow: document.getElementById('btn-flex-row'),
+        btnFlexCol: document.getElementById('btn-flex-col'),
+        flexGap: document.getElementById('flex-gap'),
+        justifyContent: document.getElementById('justify-content'),
+        alignItems: document.getElementById('align-items'),
+        flexWrap: document.getElementById('flex-wrap'),
     };
 
     // =====================================================
@@ -223,6 +232,23 @@
             });
         });
 
+        // 布局属性控件
+        const flexDirBtns = [elements.btnFlexRow, elements.btnFlexCol];
+        flexDirBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                flexDirBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                applyStyle({ flexDirection: btn.dataset.direction });
+            });
+        });
+
+        elements.flexGap.addEventListener('change', () => applyStyle({ gap: elements.flexGap.value + 'px' }));
+        elements.flexGap.addEventListener('input', () => applyStyle({ gap: elements.flexGap.value + 'px' }));
+
+        elements.justifyContent.addEventListener('change', () => applyStyle({ justifyContent: elements.justifyContent.value }));
+        elements.alignItems.addEventListener('change', () => applyStyle({ alignItems: elements.alignItems.value }));
+        elements.flexWrap.addEventListener('change', () => applyStyle({ flexWrap: elements.flexWrap.value }));
+
         // 保存
         elements.btnSave.addEventListener('click', savePage);
 
@@ -323,8 +349,12 @@
         elements.elementPath.textContent = payload.path;
         elements.elementPath.title = payload.path;
 
-        // 自动切换到编辑 Tab（从插入 Tab 添加元素后能立即看到属性面板）
+        // 自动切换到编辑 Tab
         switchTab('edit');
+
+        // 检测是否为 flex 容器，显示/隐藏布局属性面板
+        const isFlex = payload.styles.display === 'flex' || payload.styles.display === 'inline-flex';
+        elements.layoutSection.style.display = isFlex ? 'block' : 'none';
 
         // 同步控件值
         syncControlsFromStyles(payload.styles);
@@ -412,6 +442,27 @@
         if (focused !== elements.marginRight) elements.marginRight.value = parseInt(styles.marginRight) || 0;
         if (focused !== elements.marginBottom) elements.marginBottom.value = parseInt(styles.marginBottom) || 0;
         if (focused !== elements.marginLeft) elements.marginLeft.value = parseInt(styles.marginLeft) || 0;
+
+        // 布局属性（flex 容器时同步）
+        const isFlex = styles.display === 'flex' || styles.display === 'inline-flex';
+        if (isFlex) {
+            const dir = styles.flexDirection || 'row';
+            elements.btnFlexRow.classList.toggle('active', dir === 'row' || dir === 'row-reverse');
+            elements.btnFlexCol.classList.toggle('active', dir === 'column' || dir === 'column-reverse');
+
+            if (focused !== elements.flexGap) {
+                elements.flexGap.value = parseInt(styles.gap) || 0;
+            }
+            if (focused !== elements.justifyContent) {
+                elements.justifyContent.value = styles.justifyContent || 'flex-start';
+            }
+            if (focused !== elements.alignItems) {
+                elements.alignItems.value = styles.alignItems || 'stretch';
+            }
+            if (focused !== elements.flexWrap) {
+                elements.flexWrap.value = styles.flexWrap || 'nowrap';
+            }
+        }
     }
 
     // =====================================================
