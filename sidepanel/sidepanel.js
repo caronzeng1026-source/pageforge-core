@@ -38,9 +38,10 @@
         toggleBtn: document.getElementById('btn-toggle-edit'),
         toggleText: document.querySelector('.toggle-text'),
 
-        // 撤销/重做
+        // 撤销/重做/对比
         undoBtn: document.getElementById('btn-undo'),
         redoBtn: document.getElementById('btn-redo'),
+        previewBtn: document.getElementById('btn-preview'),
 
         // 主题选择
         themeSelector: document.getElementById('theme-selector'),
@@ -91,7 +92,9 @@
 
         // 保存
         saveSection: document.getElementById('save-section'),
-        btnSave: document.getElementById('btn-save'),
+        btnSaveHtml: document.getElementById('btn-save-html'),
+        btnSaveCss: document.getElementById('btn-save-css'),
+        btnSaveJson: document.getElementById('btn-save-json'),
 
         // Tab 栏
         tabBar: document.getElementById('tab-bar'),
@@ -116,6 +119,14 @@
         gridOptions: document.getElementById('grid-options'),
         gridGap: document.getElementById('grid-gap'),
         gridAlignItems: document.getElementById('grid-align-items'),
+
+        // 多选相关
+        elementInfoSingle: document.getElementById('element-info-single'),
+        elementInfoMulti: document.getElementById('element-info-multi'),
+        multiSelectNumber: document.getElementById('multi-select-number'),
+        multiSelectGroupOptions: document.getElementById('multi-select-group-options'),
+        btnGroupRow: document.getElementById('btn-group-row'),
+        btnGroupCol: document.getElementById('btn-group-col'),
     };
 
     async function init() {
@@ -127,10 +138,8 @@
         if (tab) {
             currentTabId = tab.id;
 
-            // 判断是否为本地文件页面
-            if (tab.url && tab.url.startsWith('file://')) {
-                elements.saveSection.style.display = 'block';
-            }
+            // 导出与保存区域（现在对所有页面可见）
+            elements.saveSection.style.display = 'block';
 
             // 初始化时同步编辑状态
             syncEditMode(currentTabId);
@@ -182,12 +191,35 @@
             });
         }
 
+        // 视口切换
+        const viewportBtns = [
+            document.getElementById('btn-vp-desktop'),
+            document.getElementById('btn-vp-tablet'),
+            document.getElementById('btn-vp-mobile')
+        ];
+        viewportBtns.forEach(btn => {
+            if (!btn) return;
+            btn.addEventListener('click', () => {
+                viewportBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                const width = btn.dataset.width === 'default' ? 'default' : parseInt(btn.dataset.width);
+                if (currentTabId) {
+                    safeSendMessage({
+                        type: 'SET_VIEWPORT',
+                        payload: { tabId: currentTabId, width }
+                    });
+                }
+            });
+        });
+
         // 编辑模式切换
         elements.toggleBtn.addEventListener('click', toggleEditMode);
 
-        // 撤销/重做
+        // 撤销/重做/对比
         elements.undoBtn.addEventListener('click', () => sendAction('UNDO'));
         elements.redoBtn.addEventListener('click', () => sendAction('REDO'));
+        elements.previewBtn.addEventListener('click', togglePreviewOriginal);
 
         // Tab 切换
         document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -357,8 +389,20 @@
         elements.gridGap.addEventListener('input', () => applyStyle({ gap: elements.gridGap.value + 'px' }));
         elements.gridAlignItems.addEventListener('change', () => applyStyle({ alignItems: elements.gridAlignItems.value }));
 
-        // 保存
-        elements.btnSave.addEventListener('click', savePage);
+        // ===== 多选编组 =====
+        elements.btnGroupRow.addEventListener('click', () => {
+            if (!currentTabId) return;
+            safeSendMessage({ type: 'GROUP_ELEMENTS', payload: { tabId: currentTabId, direction: 'row' } });
+        });
+        elements.btnGroupCol.addEventListener('click', () => {
+            if (!currentTabId) return;
+            safeSendMessage({ type: 'GROUP_ELEMENTS', payload: { tabId: currentTabId, direction: 'column' } });
+        });
+
+        // 保存/导出
+        elements.btnSaveHtml.addEventListener('click', saveHtmlPage);
+        elements.btnSaveCss.addEventListener('click', exportCssPatch);
+        elements.btnSaveJson.addEventListener('click', exportActionLog);
 
         // 监听来自 Content Script 的消息
         chrome.runtime.onMessage.addListener(handleMessage);
@@ -367,11 +411,8 @@
         chrome.tabs.onActivated.addListener(async (activeInfo) => {
             currentTabId = activeInfo.tabId;
             const tab = await chrome.tabs.get(currentTabId);
-            if (tab.url && tab.url.startsWith('file://')) {
-                elements.saveSection.style.display = 'block';
-            } else {
-                elements.saveSection.style.display = 'none';
-            }
+            // 导出与保存区域（现在对所有页面可见）
+            elements.saveSection.style.display = 'block';
             // 重置面板
             showNoSelection();
 
@@ -399,6 +440,7 @@
         elements.toggleText.textContent = isEditing ? '关闭编辑模式' : '开启编辑模式';
         elements.undoBtn.disabled = !isEditing;
         elements.redoBtn.disabled = !isEditing;
+        elements.previewBtn.disabled = !isEditing;
 
         // 显示/隐藏 Tab 栏
         elements.tabBar.style.display = isEditing ? 'flex' : 'none';
@@ -429,6 +471,7 @@
                 elements.toggleText.textContent = isEditing ? '关闭编辑模式' : '开启编辑模式';
                 elements.undoBtn.disabled = !isEditing;
                 elements.redoBtn.disabled = !isEditing;
+                elements.previewBtn.disabled = !isEditing;
 
                 // 显示/隐藏 Tab 栏
                 elements.tabBar.style.display = isEditing ? 'flex' : 'none';
@@ -471,6 +514,7 @@
                 elements.toggleText.textContent = isEditing ? '关闭编辑模式' : '开启编辑模式';
                 elements.undoBtn.disabled = !isEditing;
                 elements.redoBtn.disabled = !isEditing;
+                elements.previewBtn.disabled = !isEditing;
                 elements.tabBar.style.display = isEditing ? 'flex' : 'none';
                 if (!isEditing) {
                     showNoSelection();
@@ -495,18 +539,31 @@
         elements.editPanels.style.display = 'block';
 
         currentElementStyles = payload.styles;
+        const isMulti = payload.isMultiSelect;
 
-        // 更新元素信息
-        elements.elementTag.textContent = payload.tagName;
-        elements.elementPath.textContent = payload.path;
-        elements.elementPath.title = payload.path;
+        // 更新元素信息显示状态
+        if (isMulti) {
+            elements.elementInfoSingle.style.display = 'none';
+            elements.elementInfoMulti.style.display = 'flex';
+            elements.multiSelectNumber.textContent = payload.selectedCount;
+            // 组内布局控件
+            elements.layoutSection.style.display = 'block';
+            elements.multiSelectGroupOptions.style.display = 'block';
+        } else {
+            elements.elementInfoSingle.style.display = 'block';
+            elements.elementInfoMulti.style.display = 'none';
+            elements.elementTag.textContent = payload.tagName;
+            elements.elementPath.textContent = payload.path;
+            elements.elementPath.title = payload.path;
+
+            // 容器检测
+            const isContainer = payload.isContainer || false;
+            elements.layoutSection.style.display = isContainer ? 'block' : 'none';
+            elements.multiSelectGroupOptions.style.display = 'none';
+        }
 
         // 自动切换到编辑 Tab
         switchTab('edit');
-
-        // 检测是否为容器元素，显示/隐藏布局属性面板
-        const isContainer = payload.isContainer || false;
-        elements.layoutSection.style.display = isContainer ? 'block' : 'none';
 
         // 同步控件值
         syncControlsFromStyles(payload.styles);
@@ -707,35 +764,179 @@
     }
 
     // =====================================================
-    // 页面保存
+    // 预览原网页
     // =====================================================
+    let isPreviewing = false;
 
-    async function savePage() {
+    function togglePreviewOriginal() {
         if (!currentTabId) return;
 
+        isPreviewing = !isPreviewing;
+
+        // 更新按钮状态和图标
+        const eyeIcon = elements.previewBtn.querySelector('.icon-eye');
+        const eyeOffIcon = elements.previewBtn.querySelector('.icon-eye-off');
+
+        if (isPreviewing) {
+            elements.previewBtn.classList.add('previewing');
+            elements.previewBtn.setAttribute('data-tooltip', "恢复修改（退出预览）");
+            elements.previewBtn.removeAttribute('title');
+            eyeIcon.style.display = 'none';
+            eyeOffIcon.style.display = 'block';
+        } else {
+            elements.previewBtn.classList.remove('previewing');
+            elements.previewBtn.setAttribute('data-tooltip', "对比原文档（预览下无法编辑）");
+            elements.previewBtn.removeAttribute('title');
+            eyeIcon.style.display = 'block';
+            eyeOffIcon.style.display = 'none';
+        }
+
+        // 通知 Content Script 切换预览状态
+        safeSendMessage({
+            type: 'PREVIEW_ORIGINAL',
+            payload: { tabId: currentTabId, show: isPreviewing }
+        });
+    }
+
+    // =====================================================
+    // 页面保存与导出
+    // =====================================================
+
+    async function getBaseFileName() {
         const tab = await chrome.tabs.get(currentTabId);
-        // 从 URL 提取文件名
-        let fileName = 'edited-page.html';
+        let baseName = 'edited-page';
         if (tab.url) {
             const urlPath = tab.url.replace('file://', '');
             const lastSlash = urlPath.lastIndexOf('/');
             if (lastSlash !== -1) {
-                fileName = urlPath.substring(lastSlash + 1);
+                const name = urlPath.substring(lastSlash + 1);
+                baseName = name.replace(/\.[^/.]+$/, ""); // Remove extension
+                if (!baseName) baseName = 'edited-page';
             }
         }
+        return baseName;
+    }
 
-        // 请求 Content Script 提供当前页面 HTML
-        safeSendMessage({
-            type: 'GET_PAGE_HTML',
-            payload: { tabId: currentTabId }
-        }, (response) => {
-            if (response && response.html) {
-                safeSendMessage({
-                    type: 'SAVE_PAGE',
-                    payload: { html: response.html, fileName }
-                });
-            }
-        });
+    async function saveHtmlPage() {
+        if (!currentTabId) {
+            console.error('WebEdit: No currentTabId');
+            return;
+        }
+
+        const originalBtnText = elements.btnSaveHtml.innerHTML;
+        try {
+            elements.btnSaveHtml.innerHTML = '<span>处理中...</span>';
+            elements.btnSaveHtml.disabled = true;
+
+            const baseName = await getBaseFileName();
+            const fileName = `${baseName}.html`;
+
+            console.log('WebEdit: Requesting HTML from content script...');
+            safeSendMessage({
+                type: 'GET_PAGE_HTML',
+                payload: { tabId: currentTabId }
+            }, (response) => {
+                if (chrome.runtime.lastError) {
+                    console.error('WebEdit: Runtime error:', chrome.runtime.lastError.message);
+                    alert('无法获取页面数据：' + chrome.runtime.lastError.message);
+                    elements.btnSaveHtml.innerHTML = originalBtnText;
+                    elements.btnSaveHtml.disabled = false;
+                    return;
+                }
+
+                if (response && response.html) {
+                    console.log('WebEdit: Received HTML, initiating download...');
+                    safeSendMessage({
+                        type: 'SAVE_PAGE',
+                        payload: { content: response.html, fileName, mimeType: 'text/html' }
+                    }, (saveResponse) => {
+                        elements.btnSaveHtml.innerHTML = originalBtnText;
+                        elements.btnSaveHtml.disabled = false;
+                        if (chrome.runtime.lastError) {
+                            console.error('WebEdit: Save error:', chrome.runtime.lastError.message);
+                        }
+                    });
+                } else {
+                    console.error('WebEdit: Content script returned empty HTML');
+                    alert('导出失败：内容脚本未返回数据。请尝试刷新页面。');
+                    elements.btnSaveHtml.innerHTML = originalBtnText;
+                    elements.btnSaveHtml.disabled = false;
+                }
+            });
+        } catch (error) {
+            console.error('WebEdit: Unexpected error during HTML export:', error);
+            alert('导出发生意外错误，请查看控制台日志。');
+            elements.btnSaveHtml.innerHTML = originalBtnText;
+            elements.btnSaveHtml.disabled = false;
+        }
+    }
+
+    async function exportCssPatch() {
+        if (!currentTabId) return;
+
+        const originalBtnText = elements.btnSaveCss.innerHTML;
+        try {
+            elements.btnSaveCss.innerHTML = '处理中...';
+            elements.btnSaveCss.disabled = true;
+
+            const baseName = await getBaseFileName();
+            const fileName = `${baseName}-patch.css`;
+
+            safeSendMessage({
+                type: 'GET_CSS_PATCH',
+                payload: { tabId: currentTabId }
+            }, (response) => {
+                elements.btnSaveCss.innerHTML = originalBtnText;
+                elements.btnSaveCss.disabled = false;
+
+                if (response && response.css) {
+                    safeSendMessage({
+                        type: 'SAVE_PAGE',
+                        payload: { content: response.css, fileName, mimeType: 'text/css' }
+                    });
+                } else {
+                    alert('没有检测到任何样式修改。');
+                }
+            });
+        } catch (error) {
+            console.error('WebEdit: CSS export error:', error);
+            elements.btnSaveCss.innerHTML = originalBtnText;
+            elements.btnSaveCss.disabled = false;
+        }
+    }
+
+    async function exportActionLog() {
+        if (!currentTabId) return;
+
+        const originalBtnText = elements.btnSaveJson.innerHTML;
+        try {
+            elements.btnSaveJson.innerHTML = '处理中...';
+            elements.btnSaveJson.disabled = true;
+
+            const baseName = await getBaseFileName();
+            const fileName = `${baseName}-actions.json`;
+
+            safeSendMessage({
+                type: 'GET_ACTION_LOG',
+                payload: { tabId: currentTabId }
+            }, (response) => {
+                elements.btnSaveJson.innerHTML = originalBtnText;
+                elements.btnSaveJson.disabled = false;
+
+                if (response && response.json) {
+                    safeSendMessage({
+                        type: 'SAVE_PAGE',
+                        payload: { content: response.json, fileName, mimeType: 'application/json' }
+                    });
+                } else {
+                    alert('没有检测到任何操作记录。');
+                }
+            });
+        } catch (error) {
+            console.error('WebEdit: Action log export error:', error);
+            elements.btnSaveJson.innerHTML = originalBtnText;
+            elements.btnSaveJson.disabled = false;
+        }
     }
 
     // =====================================================
@@ -783,8 +984,80 @@
     }
 
     // =====================================================
-    // 启动
+    // 启动与悬停提示
     // =====================================================
 
     init();
+
+    // =====================================================
+    // 全局悬停提示 (1秒延迟)
+    // =====================================================
+    const tooltipEl = document.createElement('div');
+    tooltipEl.className = 'global-tooltip';
+    document.body.appendChild(tooltipEl);
+
+    let tooltipTimeout;
+
+    document.addEventListener('mouseover', (e) => {
+        const target = e.target.closest('[title], [data-tooltip]');
+        if (!target) return;
+
+        // 转换 native title 为 data-tooltip，截获原生提示
+        if (target.hasAttribute('title')) {
+            target.setAttribute('data-tooltip', target.getAttribute('title'));
+            target.removeAttribute('title');
+        }
+
+        const tooltipText = target.getAttribute('data-tooltip');
+        if (!tooltipText) return;
+
+        clearTimeout(tooltipTimeout);
+
+        tooltipTimeout = setTimeout(() => {
+            tooltipEl.textContent = tooltipText;
+            const rect = target.getBoundingClientRect();
+
+            // 默认显示在正下方
+            let top = rect.bottom + 6;
+            let left = rect.left + rect.width / 2;
+
+            tooltipEl.style.top = `${top}px`;
+            tooltipEl.style.left = `${left}px`;
+            tooltipEl.style.transform = `translateX(-50%)`;
+
+            tooltipEl.classList.add('show');
+
+            // 确保不溢出屏幕
+            requestAnimationFrame(() => {
+                const tr = tooltipEl.getBoundingClientRect();
+                if (tr.right > window.innerWidth - 4) {
+                    tooltipEl.style.left = `${window.innerWidth - 8}px`;
+                    tooltipEl.style.transform = `translateX(-100%)`;
+                } else if (tr.left < 4) {
+                    tooltipEl.style.left = `8px`;
+                    tooltipEl.style.transform = `translateX(0)`;
+                }
+
+                if (tr.bottom > window.innerHeight - 4) {
+                    tooltipEl.style.top = `${rect.top - tr.height - 6}px`;
+                }
+            });
+        }, 1000); // 1秒延迟
+    });
+
+    document.addEventListener('mouseout', (e) => {
+        const target = e.target.closest('[data-tooltip]');
+        if (target) {
+            // 防抖：移动到内部子元素时不算移出
+            if (e.relatedTarget && target.contains(e.relatedTarget)) return;
+            clearTimeout(tooltipTimeout);
+            tooltipEl.classList.remove('show');
+        }
+    });
+
+    document.addEventListener('mousedown', () => {
+        clearTimeout(tooltipTimeout);
+        tooltipEl.classList.remove('show');
+    });
+
 })();

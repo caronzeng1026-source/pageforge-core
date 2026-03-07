@@ -188,6 +188,8 @@ body {
     position: sticky;
     top: 0;
     z-index: 10;
+    flex-wrap: wrap;
+    gap: 8px;
 }
 
 .logo {
@@ -198,6 +200,14 @@ body {
     font-weight: 600;
     font-size: 14px;
     letter-spacing: 0.5px;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+@media (max-width: 400px) {
+    .logo span {
+        display: none;
+    }
 }
 
 .header-actions {
@@ -227,6 +237,16 @@ body {
 .icon-btn:active:not(:disabled) {
     background: var(--bg-active);
     transform: scale(0.95);
+}
+
+.icon-btn.previewing {
+    color: var(--warning);
+    background: var(--warning-glow, rgba(245, 158, 11, 0.15));
+    border: 1px solid var(--warning);
+}
+
+.icon-btn.previewing:hover {
+    background: rgba(245, 158, 11, 0.25);
 }
 
 .icon-btn:disabled {
@@ -930,4 +950,30 @@ body {
 #flex-options,
 #grid-options {
     animation: fadeIn 0.2s ease;
+}
+
+/* ==================== 自定义悬停提示 ==================== */
+.global-tooltip {
+    position: fixed;
+    padding: 6px 10px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    z-index: 99999;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    transition: opacity 0.2s ease, visibility 0.2s ease, transform 0.2s ease;
+    margin-top: 4px;
+}
+
+.global-tooltip.show {
+    opacity: 1;
+    visibility: visible;
+    margin-top: 0;
 }

@@ -9,8 +9,12 @@
     // =====================================================
     let isEditMode = false;        // 编辑模式是否开启
     let hoveredElement = null;     // 当前鼠标悬停的元素
-    let selectedElement = null;    // 当前选中的元素
+    let selectedElements = [];     // 当前选中的元素列表
+    let selectedElement = null;    // (兼容旧代码) 当前主选中元素（最后选中的，或唯一的）
     let isTextEditing = false;     // 是否正在编辑文本
+    let isPreviewingOriginal = false; // 是否处于对比原网页状态
+    let previewBanner = null;      // 对比状态下的浮层提示横幅
+    let currentPreviewIndex = 0;   // 当前预览的历史步骤索引
 
     // 拖拽状态
     let isDragging = false;        // 是否正在拖拽
@@ -108,7 +112,11 @@
     function revertAction(action) {
         switch (action.type) {
             case 'style':
-                action.element.style[action.property] = action.oldValue;
+                if (action.oldValue) {
+                    action.element.style.setProperty(action.property, action.oldValue, action.oldPriority || '');
+                } else {
+                    action.element.style.removeProperty(action.property);
+                }
                 break;
             case 'text':
                 action.element.textContent = action.oldValue;
@@ -148,27 +156,62 @@
                 break;
             case 'wrap-move':
                 // 撤销并排包裹：将元素从容器中取出放回原位，移除容器
-                // 恢复 flex 样式
+                // 撤销并排包裹（针对单个拖拽行为的旧实现）
                 action.element.style.flex = action.elementOldFlex;
                 action.target.style.flex = action.targetOldFlex;
-                // 将目标元素放回原位
                 if (action.targetOldNextSibling && action.targetOldNextSibling.parentNode === action.targetOldParent) {
                     action.targetOldParent.insertBefore(action.target, action.targetOldNextSibling);
                 } else {
                     action.targetOldParent.appendChild(action.target);
                 }
-                // 将拖拽元素放回原位
                 if (action.elementOldNextSibling && action.elementOldNextSibling.parentNode === action.elementOldParent) {
                     action.elementOldParent.insertBefore(action.element, action.elementOldNextSibling);
                 } else {
                     action.elementOldParent.appendChild(action.element);
                 }
-                // 移除空的 flex 容器
                 action.wrapper.remove();
+                break;
+            case 'wrap-item-move':
+                // 多选打包子项撤销
+                action.element.style.flex = action.oldFlex;
+                action.element.style.width = action.oldWidth;
+                if (action.oldNextSibling && action.oldNextSibling.parentNode === action.oldParent) {
+                    action.oldParent.insertBefore(action.element, action.oldNextSibling);
+                } else {
+                    action.oldParent.appendChild(action.element);
+                }
+                break;
+            case 'bulk-wrap':
+                // 先把子元素移回去
+                for (let i = action.subActions.length - 1; i >= 0; i--) {
+                    revertAction(action.subActions[i]);
+                }
+                // 再移除容器本身
+                action.wrapper.remove();
+
+                // 将撤销后的所有子元素恢复选中状态
+                deselectElement();
+                const elementsToSelect = action.subActions.map(sa => sa.element);
+                elementsToSelect.forEach(el => {
+                    selectedElements.push(el);
+                    el.classList.add('webedit-selected');
+                });
+                selectedElement = selectedElements[selectedElements.length - 1];
+                sendElementStyles(selectedElement);
+                break;
+            case 'bulk-style':
+            case 'bulk-hide':
+            case 'bulk-delete':
+            case 'bulk-paste':
+                // 反向遍历复合操作撤销
+                for (let i = action.subActions.length - 1; i >= 0; i--) {
+                    revertAction(action.subActions[i]);
+                }
                 break;
         }
         // 同步更新 Side Panel 的样式面板
-        if (action.element === selectedElement) {
+        // bulk操作如果涉及选中元素，需要统一更新一次
+        if (action.element === selectedElement || action.type.startsWith('bulk-')) {
             sendElementStyles(selectedElement);
         }
     }
@@ -177,7 +220,11 @@
     function applyAction(action) {
         switch (action.type) {
             case 'style':
-                action.element.style[action.property] = action.newValue;
+                if (action.newValue) {
+                    action.element.style.setProperty(action.property, action.newValue, 'important');
+                } else {
+                    action.element.style.removeProperty(action.property);
+                }
                 break;
             case 'text':
                 action.element.textContent = action.newValue;
@@ -229,20 +276,43 @@
                 }
                 // 注意：此时 wrapper 已经在上面 insertBefore 前面了，
                 // 接下来把 target 放在 wrapper 前面（它会替代 target 的位置）
-                // 实际上应该先 insert wrapper 到 target 位置，然后 appendChild target 和 element
-                if (action.position === 'left') {
-                    action.wrapper.appendChild(action.element);
-                    action.wrapper.appendChild(action.target);
-                } else {
-                    action.wrapper.appendChild(action.target);
-                    action.wrapper.appendChild(action.element);
-                }
                 action.element.style.flex = '1';
                 action.target.style.flex = '1';
                 break;
             }
+            case 'wrap-item-move':
+                // 因为外层 bulk-wrap 重做时会把元素 append 到 wrapper 里，
+                // 这里我们只需要重做样式的修改即可（width/flex）
+                if (action.element.style.getPropertyValue('flex') !== action.oldFlex) {
+                    // 说明是 isRow=true 操作强制写入了 flex: 1 和 width: auto
+                    action.element.style.flex = '1';
+                    action.element.style.width = 'auto';
+                }
+                break;
+            case 'bulk-wrap':
+                // 重做时：重新插入容器，并把子元素放进来
+                if (action.wrapperNextSibling && action.wrapperNextSibling.parentNode === action.wrapperParent) {
+                    action.wrapperParent.insertBefore(action.wrapper, action.wrapperNextSibling);
+                } else {
+                    action.wrapperParent.appendChild(action.wrapper);
+                }
+                action.subActions.forEach(subAction => {
+                    action.wrapper.appendChild(subAction.element);
+                    applyAction(subAction);
+                });
+                // 重做后自动选中该容器
+                selectElement(action.wrapper);
+                break;
+            case 'bulk-style':
+            case 'bulk-hide':
+            case 'bulk-delete':
+            case 'bulk-paste':
+                action.subActions.forEach(subAction => {
+                    applyAction(subAction);
+                });
+                break;
         }
-        if (action.element === selectedElement) {
+        if (action.element === selectedElement || action.type.startsWith('bulk-')) {
             sendElementStyles(selectedElement);
         }
     }
@@ -275,7 +345,7 @@
 
     /** 鼠标移入元素时的高亮处理 */
     function handleMouseOver(event) {
-        if (!isEditMode || isTextEditing || isDragging || isResizing) return;
+        if (!isEditMode || isTextEditing || isDragging || isResizing || isPreviewingOriginal) return;
         const target = event.target;
 
         // 忽略自己的 UI 元素
@@ -301,7 +371,7 @@
 
     /** 点击选中元素 */
     function handleClick(event) {
-        if (!isEditMode || isTextEditing || isDragging || isResizing) return;
+        if (!isEditMode || isTextEditing || isDragging || isResizing || isPreviewingOriginal) return;
 
         const target = event.target;
         // 忽略自己的 UI 元素（包括缩放手柄）
@@ -310,14 +380,53 @@
         event.preventDefault();
         event.stopPropagation();
 
-        selectElement(target);
+        const isMulti = event.shiftKey || event.metaKey || event.ctrlKey;
+
+        if (isMulti) {
+            toggleElementSelection(target);
+        } else {
+            selectElement(target);
+        }
     }
 
-    /** 选中一个元素 */
+    /** 切换元素的选中状态（用于多选） */
+    function toggleElementSelection(element) {
+        const index = selectedElements.indexOf(element);
+
+        if (index > -1) {
+            // 取消选中
+            selectedElements.splice(index, 1);
+            element.classList.remove('webedit-selected');
+
+            if (selectedElements.length > 0) {
+                // 还有其他选中元素，更新主选中元素
+                selectedElement = selectedElements[selectedElements.length - 1];
+                sendElementStyles(selectedElement);
+            } else {
+                // 全取消了
+                deselectElement();
+            }
+        } else {
+            // 新增选中
+            selectedElements.push(element);
+            selectedElement = element;
+            element.classList.add('webedit-selected');
+            element.classList.remove('webedit-hover');
+
+            // 多选时移除缩放手柄，避免 UI 混乱
+            removeResizeHandles();
+
+            // 发送元素样式信息到 Side Panel
+            sendElementStyles(element);
+        }
+    }
+
+    /** 选中一个元素（单选） */
     function selectElement(element) {
         // 清除之前的选中
         deselectElement();
 
+        selectedElements = [element];
         selectedElement = element;
         element.classList.add('webedit-selected');
         element.classList.remove('webedit-hover');
@@ -331,12 +440,14 @@
 
     /** 取消选中 */
     function deselectElement() {
-        if (selectedElement) {
-            selectedElement.classList.remove('webedit-selected');
-            selectedElement.contentEditable = 'inherit';
-            isTextEditing = false;
-            selectedElement = null;
-        }
+        selectedElements.forEach(el => {
+            el.classList.remove('webedit-selected');
+            el.contentEditable = 'inherit';
+        });
+        isTextEditing = false;
+        selectedElements = [];
+        selectedElement = null;
+
         // 销毁缩放手柄
         removeResizeHandles();
     }
@@ -422,7 +533,7 @@
     function handleResizeMouseDown(event) {
         const handle = event.target;
         if (!handle.classList.contains('webedit-resize-handle')) return;
-        if (!selectedElement) return;
+        if (!selectedElement || isPreviewingOriginal) return;
 
         event.preventDefault();
         event.stopPropagation();
@@ -569,6 +680,8 @@
             textContent: element.textContent?.substring(0, 100) || '',
             hasChildren: element.children.length > 0,
             isContainer: isContainerElement(element),
+            isMultiSelect: selectedElements.length > 1,
+            selectedCount: selectedElements.length
         };
 
         safeSendMessage({
@@ -582,7 +695,7 @@
     // =====================================================
 
     function handleDoubleClick(event) {
-        if (!isEditMode) return;
+        if (!isEditMode || isPreviewingOriginal) return;
         const target = event.target;
         if (target.closest('.webedit-overlay')) return;
 
@@ -662,22 +775,44 @@
     // =====================================================
 
     function applyStyles(styles) {
-        if (!selectedElement) return;
+        if (!selectedElements || selectedElements.length === 0) return;
+
+        const subActions = [];
 
         for (const [property, value] of Object.entries(styles)) {
-            const oldValue = selectedElement.style[property];
-            selectedElement.style[property] = value;
-            pushAction({
-                type: 'style',
-                element: selectedElement,
-                property,
-                oldValue: oldValue || '',
-                newValue: value,
+            const kebabProp = property.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+            selectedElements.forEach(element => {
+                const oldValue = element.style.getPropertyValue(kebabProp);
+                const oldPriority = element.style.getPropertyPriority(kebabProp);
+
+                if (value) {
+                    element.style.setProperty(kebabProp, value, 'important');
+                } else {
+                    element.style.removeProperty(kebabProp);
+                }
+
+                subActions.push({
+                    type: 'style',
+                    element,
+                    property: kebabProp,
+                    oldValue: oldValue || '',
+                    oldPriority: oldPriority || '',
+                    newValue: value,
+                });
             });
         }
 
-        // 更新面板显示
-        sendElementStyles(selectedElement);
+        if (subActions.length > 0) {
+            pushAction({
+                type: 'bulk-style',
+                subActions
+            });
+        }
+
+        // 更新面板显示（使用主选中元素的数据）
+        if (selectedElement) {
+            sendElementStyles(selectedElement);
+        }
     }
 
     // =====================================================
@@ -685,33 +820,57 @@
     // =====================================================
 
     function hideElement() {
-        if (!selectedElement) return;
-        const oldDisplay = selectedElement.style.display;
-        pushAction({
-            type: 'hide',
-            element: selectedElement,
-            oldValue: oldDisplay || '',
+        if (!selectedElements || selectedElements.length === 0) return;
+
+        const subActions = [];
+
+        selectedElements.forEach(element => {
+            const oldDisplay = element.style.display;
+            subActions.push({
+                type: 'hide',
+                element,
+                oldValue: oldDisplay || '',
+            });
+            element.style.display = 'none';
+            element.classList.add('webedit-hidden-element');
         });
-        selectedElement.style.display = 'none';
-        selectedElement.classList.add('webedit-hidden-element');
+
+        pushAction({
+            type: 'bulk-hide',
+            subActions
+        });
+
         deselectElement();
     }
 
     function deleteElement() {
-        if (!selectedElement) return;
-        const element = selectedElement;
-        const parent = element.parentElement;
-        const nextSibling = element.nextSibling;
+        if (!selectedElements || selectedElements.length === 0) return;
+
+        const subActions = [];
+        // 为了确保撤销时能够按正确顺序恢复，我们先记录所有元素的状态
+        const elementsToRemove = [...selectedElements];
+
+        elementsToRemove.forEach(element => {
+            const parent = element.parentElement;
+            const nextSibling = element.nextSibling;
+            subActions.push({
+                type: 'delete',
+                element,
+                parent,
+                nextSibling,
+            });
+        });
 
         pushAction({
-            type: 'delete',
-            element,
-            parent,
-            nextSibling,
+            type: 'bulk-delete',
+            subActions
         });
 
         deselectElement();
-        element.remove();
+
+        elementsToRemove.forEach(element => {
+            element.remove();
+        });
     }
 
     // =====================================================
@@ -720,84 +879,103 @@
 
     /** 复制选中元素的 DOM 快照到内部剪贴板 */
     function copyElement() {
-        if (!selectedElement) return;
+        if (!selectedElements || selectedElements.length === 0) return;
 
-        // 克隆元素并清除 WebEdit 临时 class，保证干净快照
-        const clone = selectedElement.cloneNode(true);
-        const editClasses = [
-            'webedit-selected', 'webedit-hover', 'webedit-drag-source',
-            'webedit-drop-target', 'webedit-drop-zone', 'webedit-drop-zone-active',
-            'webedit-copy-flash'
-        ];
-        editClasses.forEach(cls => {
-            clone.classList.remove(cls);
-            clone.querySelectorAll(`.${cls}`).forEach(el => el.classList.remove(cls));
+        // 支持多选复制，将多个克隆元素包裹在一个 DocumentFragment 或者简单的 wrapper 中
+        // 但为了简单和兼容单选，如果只有一个，就像原来一样保存
+        // 如果有多个，我们保存一个包含多个元素的数组或包裹它的 HTML
+
+        const wrap = document.createElement('div');
+
+        selectedElements.forEach(element => {
+            const clone = element.cloneNode(true);
+            const editClasses = [
+                'webedit-selected', 'webedit-hover', 'webedit-drag-source',
+                'webedit-drop-target', 'webedit-drop-zone', 'webedit-drop-zone-active',
+                'webedit-copy-flash'
+            ];
+            editClasses.forEach(cls => {
+                clone.classList.remove(cls);
+                clone.querySelectorAll(`.${cls}`).forEach(el => el.classList.remove(cls));
+            });
+            // 移除克隆中的 contenteditable 属性
+            clone.removeAttribute('contenteditable');
+            clone.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
+
+            wrap.appendChild(clone);
+
+            // 视觉反馈：短暂绿色闪烁
+            element.classList.add('webedit-copy-flash');
+            setTimeout(() => {
+                element?.classList.remove('webedit-copy-flash');
+            }, 400);
         });
-        // 移除克隆中的 contenteditable 属性
-        clone.removeAttribute('contenteditable');
-        clone.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
 
-        clipboardHTML = clone.outerHTML;
-
-        // 视觉反馈：短暂绿色闪烁
-        selectedElement.classList.add('webedit-copy-flash');
-        setTimeout(() => {
-            selectedElement?.classList.remove('webedit-copy-flash');
-        }, 400);
+        clipboardHTML = wrap.innerHTML;
     }
 
     /** 将剪贴板中的元素粘贴到页面 */
     function pasteElement() {
         if (!clipboardHTML) return;
 
-        // 从 HTML 快照创建新元素
         const temp = document.createElement('div');
         temp.innerHTML = clipboardHTML;
-        const newElement = temp.firstElementChild;
-        if (!newElement) return;
+        const newElements = Array.from(temp.children);
 
-        // 标记为 WebEdit 添加的元素
-        newElement.classList.add('webedit-added-element');
+        if (newElements.length === 0) return;
 
-        // 确定插入位置（复用 addElement 的策略）
+        // 确定插入位置
         let parent;
         let nextSibling;
         if (selectedElement && selectedElement !== document.body && selectedElement !== document.documentElement) {
             if (isContainerElement(selectedElement)) {
-                // 容器元素：插入到内部末尾
                 parent = selectedElement;
                 nextSibling = null;
-                parent.appendChild(newElement);
             } else {
-                // 叶子元素：在其后方插入
                 parent = selectedElement.parentElement;
                 nextSibling = selectedElement.nextSibling;
-                if (nextSibling && nextSibling.parentNode === parent) {
-                    parent.insertBefore(newElement, nextSibling);
-                } else {
-                    parent.appendChild(newElement);
-                }
             }
         } else {
-            // 无选中元素：插入到 body 末尾
             parent = document.body;
             nextSibling = null;
-            parent.appendChild(newElement);
         }
 
-        // 记录到历史栈（支持撤销）
-        pushAction({
-            type: 'paste',
-            element: newElement,
-            parent,
-            nextSibling: newElement.nextSibling,
+        const subActions = [];
+        newElements.forEach(newElement => {
+            newElement.classList.add('webedit-added-element');
+
+            if (nextSibling && nextSibling.parentNode === parent) {
+                parent.insertBefore(newElement, nextSibling);
+            } else {
+                parent.appendChild(newElement);
+            }
+
+            subActions.push({
+                type: 'paste',
+                element: newElement,
+                parent,
+                nextSibling: newElement.nextSibling,
+            });
         });
 
-        // 自动选中粘贴的元素
-        selectElement(newElement);
+        pushAction({
+            type: 'bulk-paste',
+            subActions
+        });
 
-        // 滚动到新元素可见区域
-        newElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // 自动选中新粘贴的元素们
+        deselectElement();
+        newElements.forEach(el => {
+            selectedElements.push(el);
+            el.classList.add('webedit-selected');
+        });
+        selectedElement = newElements[newElements.length - 1];
+        sendElementStyles(selectedElement);
+
+        // 滚动到最后一个新元素可见区域
+        if (selectedElement) {
+            selectedElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
     }
 
     // =====================================================
@@ -1545,6 +1723,13 @@
         });
     }
 
+    function handleWindowResize() {
+        if (isEditMode && selectedElement) {
+            // 当窗口/视口大小改变时，重新计算并定位选中元素的缩放手柄
+            updateResizeHandles();
+        }
+    }
+
     // =====================================================
     // 编辑模式切换
     // =====================================================
@@ -1564,9 +1749,16 @@
 
         // 键盘快捷键
         document.addEventListener('keydown', handleKeyDown, true);
+
+        // 窗口尺寸变化 (响应式预览切换、缩放等情况)
+        window.addEventListener('resize', handleWindowResize, true);
     }
 
     function disableEditMode() {
+        if (isPreviewingOriginal) {
+            togglePreviewOriginal(false);
+        }
+
         isEditMode = false;
         deselectElement();
         endDrag(); // 清理可能还在进行的拖拽
@@ -1585,6 +1777,7 @@
         document.removeEventListener('mousemove', handleDragMouseMove, true);
         document.removeEventListener('mouseup', handleDragMouseUp, true);
         document.removeEventListener('keydown', handleKeyDown, true);
+        window.removeEventListener('resize', handleWindowResize, true);
     }
 
     function handleKeyDown(event) {
@@ -1677,6 +1870,23 @@
             el.removeAttribute('contenteditable');
         });
 
+        // 确保所有在 undoStack 中被修改过的元素都拥有唯一导出 ID
+        // 调用一次 getCssPatch 以及 getActionLog 会自动分配这些 ID
+        // 为了防患未然，我们在这里显式分配一次
+        undoStack.forEach(action => {
+            if (action.element) getExportId(action.element);
+            if (action.wrapper) getExportId(action.wrapper);
+            if (action.target) getExportId(action.target);
+            if (action.subActions) {
+                action.subActions.forEach(sub => {
+                    if (sub.element) getExportId(sub.element);
+                });
+            }
+        });
+
+        // 移除可能因为上面的 class 清理导致的空 class 属性
+        document.querySelectorAll('[class=""]').forEach(el => el.removeAttribute('class'));
+
         const html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
 
         // 恢复编辑模式的 class
@@ -1685,6 +1895,82 @@
         });
 
         return html;
+    }
+
+    // =====================================================
+    // 特殊交互功能 - 多选布局分组
+    // =====================================================
+
+    /**
+     * 将当前选中的所有分散元素打包到一个 Flex 容器中
+     * @param {string} direction 'row' 或 'column'
+     */
+    function groupSelectedElements(direction) {
+        if (!selectedElements || selectedElements.length < 2) return;
+
+        // 根据文档流位置对选中的元素进行排序，以确保打包后的顺序与视觉/DOM 顺序一致
+        const sortedElements = [...selectedElements].sort((a, b) => {
+            // compareDocumentPosition: 4 (Node.DOCUMENT_POSITION_FOLLOWING), 2 (Node.DOCUMENT_POSITION_PRECEDING)
+            return (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1;
+        });
+
+        // 确定插入容器的位置 (第一个选中的元素原本所在的地方)
+        const primaryElement = sortedElements[0];
+        const primaryParent = primaryElement.parentElement;
+        const primaryNextSibling = primaryElement.nextSibling;
+
+        // 创建新的 Flex 容器
+        const wrapper = document.createElement('div');
+        wrapper.classList.add('webedit-flex-container', 'webedit-added-element');
+        // 根据方向设置初始样式
+        const isRow = direction === 'row';
+        wrapper.style.cssText = `display: flex; flex-direction: ${isRow ? 'row' : 'column'}; gap: 16px; padding: 16px; margin: 0; align-items: stretch;`;
+
+        // 将容器插入到文档中
+        if (primaryNextSibling && primaryNextSibling.parentNode === primaryParent) {
+            primaryParent.insertBefore(wrapper, primaryNextSibling);
+        } else {
+            primaryParent.appendChild(wrapper);
+        }
+
+        // 收集撤销所需要的旧位置状态，并把它们移动到容器里
+        const subActions = [];
+
+        sortedElements.forEach(element => {
+            const oldParent = element.parentElement;
+            const oldNextSibling = element.nextSibling;
+            const oldFlex = element.style.getPropertyValue('flex') || '';
+            const oldWidth = element.style.width;
+
+            // 如果原本不是 flex 项目，且方向是 row，则默认使其平分宽度 (flex: 1)
+            // 如果原本是绝对定位等，这里为了进入 flex 布局流可能需要清除，但最安全的做法是仅添加 flex: 1
+            if (isRow) {
+                element.style.flex = '1';
+                element.style.width = 'auto'; // 清除可能干扰的宽度
+            }
+
+            wrapper.appendChild(element);
+
+            subActions.push({
+                type: 'wrap-item-move', // 内部专用的自定义子类型，用来记录移动和样式修改
+                element,
+                oldParent,
+                oldNextSibling,
+                oldFlex,
+                oldWidth
+            });
+        });
+
+        pushAction({
+            type: 'bulk-wrap',
+            wrapper,
+            wrapperParent: primaryParent,
+            wrapperNextSibling: wrapper.nextSibling, // 记录 wrapper 的位置以便重做
+            subActions
+        });
+
+        // 打包后，自动选中这个新诞生的容器，方便用户接着改属性
+        selectElement(wrapper);
     }
 
     // =====================================================
@@ -1700,6 +1986,13 @@
                     enableEditMode();
                 } else {
                     disableEditMode();
+                }
+                sendResponse({ success: true });
+                break;
+
+            case 'GROUP_ELEMENTS':
+                if (payload.direction) {
+                    groupSelectedElements(payload.direction);
                 }
                 sendResponse({ success: true });
                 break;
@@ -1747,9 +2040,304 @@
                 sendResponse({ html: getPageHTML() });
                 break;
 
+            case 'GET_CSS_PATCH':
+                sendResponse({ css: getCssPatch() });
+                break;
+
+            case 'GET_ACTION_LOG':
+                sendResponse({ json: getActionLog() });
+                break;
+
+            case 'PREVIEW_ORIGINAL':
+                togglePreviewOriginal(payload.show);
+                sendResponse({ success: true });
+                break;
+
             default:
                 break;
         }
     });
+
+    // =====================================================
+    // 数据导出功能 (HTML, CSS Patch, Action Log)
+    // =====================================================
+
+    /** 
+     * 为导出的元素分配并获取唯一标识符 
+     * 用于在 HTML 源码和 CSS Patch 间建立关联
+     */
+    let exportIdCounter = 0;
+    function getExportId(element) {
+        if (!element) return null;
+        let id = element.getAttribute('data-webedit-export-id');
+        if (!id) {
+            exportIdCounter++;
+            id = Date.now().toString(36) + '-' + exportIdCounter;
+            element.setAttribute('data-webedit-export-id', id);
+        }
+        return id;
+    }
+
+    /**
+     * 生成 CSS Patch
+     * 遍历所有在历史栈中被修改过内联样式的元素，收集其 style 属性并生成 CSS 规则
+     */
+    function getCssPatch() {
+        const styledElements = new Set();
+
+        // 1. 从 undoStack 中找到所有被修改过样式的元素
+        undoStack.forEach(action => {
+            if (action.type === 'style' && action.element) {
+                styledElements.add(action.element);
+            } else if (action.type.startsWith('bulk-') && action.subActions) {
+                action.subActions.forEach(sub => {
+                    if (sub.type === 'style' && sub.element) {
+                        styledElements.add(sub.element);
+                    }
+                });
+            } else if (action.type === 'wrap-move') {
+                if (action.wrapper) styledElements.add(action.wrapper);
+                if (action.element) styledElements.add(action.element);
+                if (action.target) styledElements.add(action.target);
+            } else if (action.type === 'resize' && action.element) {
+                styledElements.add(action.element);
+            }
+        });
+
+        // 2. 如果没有样式修改，也至少检查当前带有 style 属性（且由插件生成的）的元素
+        // 这里简化处理：我们只导出 undoStack 涉及到的元素的内联样式
+
+        let cssLines = [];
+        cssLines.push('/* WebEdit CSS Patch Generated on ' + new Date().toLocaleString() + ' */');
+        cssLines.push('');
+
+        styledElements.forEach(element => {
+            if (!document.body.contains(element)) return; // 忽略已被删除的元素
+
+            const cssText = element.style.cssText;
+            if (!cssText) return;
+
+            const exportId = getExportId(element);
+            // 格式化输出
+            const formattedCssText = cssText.split(';').map(s => s.trim()).filter(Boolean).join(';\n  ') + ';';
+
+            cssLines.push(`[data-webedit-export-id="${exportId}"] {`);
+            cssLines.push(`  ${formattedCssText}`);
+            cssLines.push('}\n');
+        });
+
+        if (cssLines.length <= 2) return null; // No actual CSS
+        return cssLines.join('\n');
+    }
+
+    /**
+     * 生成操作日志 (JSON)
+     * 序列化 undoStack，将 DOM 引用替换为路径或 ID
+     */
+    function getActionLog() {
+        if (undoStack.length === 0) return null;
+
+        // 辅助序列化函数
+        const serializeAction = (act) => {
+            const serialized = { type: act.type };
+
+            // 基础属性
+            if (act.property) serialized.property = act.property;
+            if (act.oldValue !== undefined) serialized.oldValue = act.oldValue;
+            if (act.newValue !== undefined) serialized.newValue = act.newValue;
+            if (act.oldWidth) serialized.oldWidth = act.oldWidth;
+            if (act.newWidth) serialized.newWidth = act.newWidth;
+            if (act.oldHeight) serialized.oldHeight = act.oldHeight;
+            if (act.newHeight) serialized.newHeight = act.newHeight;
+
+            // DOM 元素引用处理
+            if (act.element) {
+                serialized.elementId = getExportId(act.element);
+                serialized.elementPath = getElementPath(act.element);
+                serialized.elementTagName = act.element.tagName.toLowerCase();
+            }
+            if (act.wrapper) serialized.wrapperId = getExportId(act.wrapper);
+            if (act.target) serialized.targetId = getExportId(act.target);
+
+            // 递归处理嵌套 Action
+            if (act.subActions && Array.isArray(act.subActions)) {
+                serialized.subActions = act.subActions.map(serializeAction);
+            }
+
+            return serialized;
+        };
+
+        const logData = {
+            exportTime: new Date().toISOString(),
+            totalActions: undoStack.length,
+            actions: undoStack.map(serializeAction)
+        };
+
+        return JSON.stringify(logData, null, 2);
+    }
+
+    // =====================================================
+    // 预览模式状态切换 & 历史滑动
+    // =====================================================
+
+    /** 切换“预览原始网页”状态 */
+    function togglePreviewOriginal(show) {
+        if (show === isPreviewingOriginal) return;
+
+        isPreviewingOriginal = show;
+
+        if (show) {
+            // 取消所有高亮和选中
+            deselectElement();
+            if (hoveredElement) {
+                hoveredElement.classList.remove('webedit-hover');
+                hoveredElement = null;
+            }
+
+            // 先撤销所有操作，回到0步
+            for (let i = undoStack.length - 1; i >= 0; i--) {
+                revertAction(undoStack[i]);
+            }
+            currentPreviewIndex = 0;
+
+            // 显示滑块横幅
+            if (!previewBanner) {
+                previewBanner = document.createElement('div');
+                previewBanner.classList.add('webedit-overlay');
+                previewBanner.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background: rgba(15, 23, 42, 0.95);
+                    color: white;
+                    padding: 16px 24px;
+                    border-radius: 16px;
+                    font-size: 14px;
+                    font-weight: 500;
+                    font-family: system-ui, -apple-system, sans-serif;
+                    z-index: 2147483647;
+                    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255,255,255,0.1);
+                    backdrop-filter: blur(12px);
+                    -webkit-backdrop-filter: blur(12px);
+                    animation: webeditFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 12px;
+                    min-width: 320px;
+                `;
+
+                // HTML 结构：标题 + 滑块 + 当前步骤文本
+                previewBanner.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 8px; width: 100%; justify-content: center;">
+                        <span style="font-size: 16px;">🕰️</span>
+                        <span style="font-weight: 600; letter-spacing: 0.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.5);">历史修改对比预览</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
+                        <span style="font-size: 12px; color: #94a3b8; font-variant-numeric: tabular-nums;">最初</span>
+                        <input type="range" id="webedit-history-slider" min="0" max="` + undoStack.length + `" value="0" 
+                            style="flex: 1; accent-color: #3b82f6; height: 4px; border-radius: 2px; cursor: pointer; background: rgba(255,255,255,0.2); appearance: none; outline: none;">
+                        <span style="font-size: 12px; color: #94a3b8; font-variant-numeric: tabular-nums;">最新</span>
+                    </div>
+                    <div id="webedit-history-label" style="font-size: 13px; color: #cbd5e1; background: rgba(255,255,255,0.1); padding: 4px 12px; border-radius: 20px;">
+                        处于原始状态 ( 0 / ` + undoStack.length + ` )
+                    </div>
+                `;
+
+                // 给 slider 的 thumb 加上样式
+                const style = document.createElement('style');
+                style.id = 'webedit-slider-style';
+                style.textContent = `
+                    #webedit-history-slider::-webkit-slider-thumb {
+                        appearance: none;
+                        width: 16px;
+                        height: 16px;
+                        border-radius: 50%;
+                        background: #fff;
+                        box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+                        cursor: grab;
+                        transition: transform 0.1s;
+                    }
+                    #webedit-history-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
+                    #webedit-history-slider::-webkit-slider-thumb:active { cursor: grabbing; transform: scale(0.95); }
+                `;
+                if (!document.getElementById('webedit-slider-style')) {
+                    document.head.appendChild(style);
+                }
+
+                document.body.appendChild(previewBanner);
+
+                // 绑定拖拽事件 (Time-travel)
+                const slider = previewBanner.querySelector('#webedit-history-slider');
+                const label = previewBanner.querySelector('#webedit-history-label');
+
+                slider.addEventListener('input', (e) => {
+                    const targetIndex = parseInt(e.target.value, 10);
+                    const stackLen = undoStack.length;
+
+                    // 当向右拖（重播修改）
+                    while (currentPreviewIndex < targetIndex) {
+                        applyAction(undoStack[currentPreviewIndex]);
+                        currentPreviewIndex++;
+                    }
+
+                    // 当向左拖（撤销修改）
+                    while (currentPreviewIndex > targetIndex) {
+                        currentPreviewIndex--;
+                        revertAction(undoStack[currentPreviewIndex]);
+                    }
+
+                    // 更新文字提示
+                    if (targetIndex === 0) {
+                        label.textContent = "处于原始状态 ( 0 / " + stackLen + " )";
+                        label.style.color = '#cbd5e1';
+                    } else if (targetIndex === stackLen) {
+                        label.textContent = "处于最新状态 ( " + targetIndex + " / " + stackLen + " )";
+                        label.style.color = '#3b82f6';
+                    } else {
+                        label.textContent = "预览第 " + targetIndex + " 步的修改 ( " + targetIndex + " / " + stackLen + " )";
+                        label.style.color = '#f8fafc';
+                    }
+                });
+
+                // 防止点击 banner 穿透并停止事件冒泡
+                previewBanner.addEventListener('mousedown', (e) => e.stopPropagation());
+                previewBanner.addEventListener('click', (e) => e.stopPropagation());
+                previewBanner.addEventListener('mouseover', (e) => e.stopPropagation());
+
+                if (!document.getElementById('webedit-anim-style')) {
+                    const animStyle = document.createElement('style');
+                    animStyle.id = 'webedit-anim-style';
+                    animStyle.textContent = `
+                        @keyframes webeditFadeIn {
+                            from { opacity: 0; transform: translate(-50%, -15px) scale(0.97); }
+                            to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+                        }
+                    `;
+                    document.head.appendChild(animStyle);
+                }
+            }
+        } else {
+            // 退出预览时：从当前滑块所处的步骤 currentPreviewIndex 恢复到栈顶 undoStack.length
+            for (let i = currentPreviewIndex; i < undoStack.length; i++) {
+                applyAction(undoStack[i]);
+            }
+            currentPreviewIndex = undoStack.length; // 重置为最新位置
+
+            // 移除横幅和注入的样式
+            if (previewBanner) {
+                previewBanner.style.animation = 'webeditFadeIn 0.2s reverse forwards';
+                setTimeout(() => {
+                    if (previewBanner) {
+                        previewBanner.remove();
+                        previewBanner = null;
+                    }
+                    const sliderStyle = document.getElementById('webedit-slider-style');
+                    if (sliderStyle) sliderStyle.remove();
+                }, 200);
+            }
+        }
+    }
 
 })();

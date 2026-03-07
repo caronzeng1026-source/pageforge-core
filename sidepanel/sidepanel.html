@@ -21,6 +21,29 @@
         <span>WebEdit</span>
       </div>
       <div class="header-actions">
+        <!-- 视口切换 -->
+        <div class="viewport-toggles btn-group" style="margin-right: 4px;">
+          <button id="btn-vp-desktop" class="style-btn active" title="桌面视口 (默认)" data-width="default">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+          </button>
+          <button id="btn-vp-tablet" class="style-btn" title="平板视口 (768px)" data-width="768">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="4" y="2" width="16" height="20" rx="2" ry="2" />
+              <line x1="12" y1="18" x2="12.01" y2="18" />
+            </svg>
+          </button>
+          <button id="btn-vp-mobile" class="style-btn" title="移动视口 (390px)" data-width="390">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+              <line x1="12" y1="18" x2="12.01" y2="18" />
+            </svg>
+          </button>
+        </div>
+
         <!-- 主题切换 -->
         <select id="theme-selector" class="theme-select" title="选择主题">
           <option value="theme-dark">Dark</option>
@@ -29,6 +52,21 @@
           <option value="theme-cyber">Cyber</option>
           <option value="theme-nature">Nature</option>
         </select>
+
+        <button id="btn-preview" class="icon-btn" title="对比原文档（预览下无法编辑）" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" class="icon-eye">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" class="icon-eye-off" style="display: none;">
+            <path
+              d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24">
+            </path>
+            <line x1="1" y1="1" x2="23" y2="23"></line>
+          </svg>
+        </button>
 
         <button id="btn-undo" class="icon-btn" title="撤销 (Ctrl+Z)" disabled>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -49,7 +87,7 @@
 
     <!-- 编辑模式开关 -->
     <div class="edit-toggle-section">
-      <button id="btn-toggle-edit" class="edit-toggle-btn">
+      <button id="btn-toggle-edit" class="edit-toggle-btn" title="开启或关闭页面可视化编辑功能">
         <span class="toggle-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round">
@@ -63,7 +101,7 @@
 
     <!-- Tab 栏（编辑模式下显示） -->
     <div id="tab-bar" class="tab-bar" style="display: none;">
-      <button class="tab-btn active" data-tab="edit">
+      <button class="tab-btn active" data-tab="edit" title="编辑选中的元素属性">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
           stroke-linecap="round" stroke-linejoin="round">
           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -71,7 +109,7 @@
         </svg>
         <span>编辑</span>
       </button>
-      <button class="tab-btn" data-tab="insert">
+      <button class="tab-btn" data-tab="insert" title="向页面插入新的界面元素">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
           stroke-linecap="round" stroke-linejoin="round">
           <line x1="12" y1="5" x2="12" y2="19" />
@@ -100,8 +138,14 @@
       <div id="edit-panels" class="edit-panels" style="display: none;">
         <!-- 元素信息 -->
         <div class="panel-section element-info">
-          <div class="element-tag" id="element-tag">div</div>
-          <div class="element-path" id="element-path" title="">body > div</div>
+          <div class="element-info-single" id="element-info-single">
+            <div class="element-tag" id="element-tag">div</div>
+            <div class="element-path" id="element-path" title="">body > div</div>
+          </div>
+          <div class="element-info-multi" id="element-info-multi" style="display: none;">
+            <div class="multi-select-count">已选中 <span id="multi-select-number">2</span> 个元素</div>
+            <div class="multi-select-hint">您可以批量修改它们的样式</div>
+          </div>
         </div>
 
         <!-- 文本编辑区 -->
@@ -362,6 +406,33 @@
               </div>
             </div>
 
+            <!-- ===== 多选编组选项 ===== -->
+            <div id="multi-select-group-options"
+              style="display: none; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
+              <div class="control-row" style="margin-bottom: 8px;">
+                <label style="width: auto; margin-right: 8px;">组合布局</label>
+                <span style="font-size: 11px; color: var(--text-secondary); flex: 1;">将选中的分散元素打包到一个容器中</span>
+              </div>
+              <div class="btn-group" style="display: flex; gap: 8px;">
+                <button class="action-btn" id="btn-group-row" style="flex: 1; padding: 6px;" title="将高亮的元素横向打包到一个容器组中">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    style="margin-right: 4px;">
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <line x1="12" y1="3" x2="12" y2="21" />
+                  </svg>
+                  横向成组
+                </button>
+                <button class="action-btn" id="btn-group-col" style="flex: 1; padding: 6px;" title="将高亮的元素纵向打包到一个容器组中">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    style="margin-right: 4px;">
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <line x1="3" y1="12" x2="21" y2="12" />
+                  </svg>
+                  纵向成组
+                </button>
+              </div>
+            </div>
+
             <!-- ===== Flex 选项 ===== -->
             <div id="flex-options" style="display: none;">
               <!-- 方向 -->
@@ -488,17 +559,48 @@
           </div>
         </div>
 
-        <!-- 保存按钮（仅本地文件可用） -->
-        <div class="panel-section" id="save-section" style="display: none;">
-          <button id="btn-save" class="save-btn">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-              <polyline points="17 21 17 13 7 13 7 21" />
-              <polyline points="7 3 7 8 15 8" />
+        <!-- 导出与保存按钮区 -->
+        <div class="panel-section" id="save-section">
+          <div class="section-header">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
-            <span>保存为本地文件</span>
-          </button>
+            <span>导出并保存</span>
+          </div>
+          <div class="section-body">
+            <div class="export-actions" style="display: flex; flex-direction: column; gap: 8px;">
+              <button id="btn-save-html" class="save-btn" title="将当前编辑状态保存为完整的 HTML 文件">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                  <polyline points="10 9 9 9 8 9" />
+                </svg>
+                <span>导出完整 HTML</span>
+              </button>
+
+              <div style="display: flex; gap: 8px;">
+                <button id="btn-save-css" class="action-btn" style="flex: 1;" title="仅导出您修改过的样式，生成 CSS Patch 文件">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    style="margin-right: 4px;">
+                    <path d="M12 2l3 6 6 1-4.5 4.5L18 20l-6-3.5L6 20l1.5-6.5L3 9l6-1z" />
+                  </svg>
+                  CSS Patch
+                </button>
+                <button id="btn-save-json" class="action-btn" style="flex: 1;" title="导出包含所有编辑步骤的 JSON 操作日志">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    style="margin-right: 4px;">
+                    <polyline points="16 18 22 12 16 6" />
+                    <polyline points="8 6 2 12 8 18" />
+                  </svg>
+                  Action Log
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
