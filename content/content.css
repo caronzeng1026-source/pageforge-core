@@ -12,15 +12,13 @@ body.webedit-active * {
 .webedit-hover {
   outline: 2px dashed rgba(59, 130, 246, 0.7) !important;
   outline-offset: 2px !important;
-  background-color: rgba(59, 130, 246, 0.04) !important;
-  transition: outline 0.15s ease, background-color 0.15s ease !important;
+  transition: outline 0.15s ease !important;
 }
 
 /* 选中元素的高亮效果 */
 .webedit-selected {
   outline: 2px solid rgba(59, 130, 246, 0.9) !important;
   outline-offset: 2px !important;
-  background-color: rgba(59, 130, 246, 0.06) !important;
   box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15) !important;
   transition: all 0.15s ease !important;
 }
@@ -30,7 +28,6 @@ body.webedit-active * {
   cursor: text !important;
   outline-color: rgba(16, 185, 129, 0.9) !important;
   box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.15) !important;
-  background-color: rgba(16, 185, 129, 0.04) !important;
 }
 
 /* 被隐藏的元素标记（编辑模式下仍然可见，降低透明度） */
@@ -114,4 +111,122 @@ body.webedit-dragging * {
   outline: 2px dashed rgba(16, 185, 129, 0.6) !important;
   outline-offset: -2px !important;
   background-color: rgba(16, 185, 129, 0.04) !important;
+}
+
+/* ===== 新增元素标记 ===== */
+
+/* 编辑模式下新添加的元素标记（微弱蓝色虚线提示） */
+body.webedit-active .webedit-added-element {
+  outline: 1px dashed rgba(59, 130, 246, 0.4) !important;
+  outline-offset: 1px !important;
+  animation: webedit-fadeIn 0.3s ease !important;
+}
+
+@keyframes webedit-fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ===== 缩放手柄样式 ===== */
+
+/* 单个缩放手柄的基础外观 */
+.webedit-resize-handle {
+  position: absolute !important;
+  width: 10px !important;
+  height: 10px !important;
+  background: #ffffff !important;
+  border: 2px solid #3b82f6 !important;
+  border-radius: 2px !important;
+  z-index: 2147483646 !important;
+  box-sizing: border-box !important;
+  transition: background-color 0.15s ease, transform 0.15s ease !important;
+}
+
+/* 悬停时手柄高亮 */
+.webedit-resize-handle:hover {
+  background: #3b82f6 !important;
+  transform: scale(1.3) !important;
+}
+
+/* --- 8 个方向的定位 --- */
+
+/* 左上角 */
+.webedit-resize-nw {
+  top: -5px !important;
+  left: -5px !important;
+}
+
+/* 上边中点 */
+.webedit-resize-n {
+  top: -5px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+}
+
+.webedit-resize-n:hover {
+  transform: translateX(-50%) scale(1.3) !important;
+}
+
+/* 右上角 */
+.webedit-resize-ne {
+  top: -5px !important;
+  right: -5px !important;
+}
+
+/* 左边中点 */
+.webedit-resize-w {
+  top: 50% !important;
+  left: -5px !important;
+  transform: translateY(-50%) !important;
+}
+
+.webedit-resize-w:hover {
+  transform: translateY(-50%) scale(1.3) !important;
+}
+
+/* 右边中点 */
+.webedit-resize-e {
+  top: 50% !important;
+  right: -5px !important;
+  transform: translateY(-50%) !important;
+}
+
+.webedit-resize-e:hover {
+  transform: translateY(-50%) scale(1.3) !important;
+}
+
+/* 左下角 */
+.webedit-resize-sw {
+  bottom: -5px !important;
+  left: -5px !important;
+}
+
+/* 下边中点 */
+.webedit-resize-s {
+  bottom: -5px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+}
+
+.webedit-resize-s:hover {
+  transform: translateX(-50%) scale(1.3) !important;
+}
+
+/* 右下角 */
+.webedit-resize-se {
+  bottom: -5px !important;
+  right: -5px !important;
+}
+
+/* 缩放进行中的全局光标和禁止选择 */
+body.webedit-resizing,
+body.webedit-resizing * {
+  user-select: none !important;
 }

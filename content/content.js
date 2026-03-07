@@ -24,6 +24,15 @@
     let dropPosition = null;       // 放置位置：'before' | 'after'
     const DRAG_THRESHOLD = 5;      // 拖拽触发阈值（像素）
 
+    // 缩放状态
+    let isResizing = false;        // 是否正在缩放
+    let resizeHandle = null;       // 当前拖拽的缩放手柄
+    let resizeStartX = 0;          // 缩放起始鼠标 X
+    let resizeStartY = 0;          // 缩放起始鼠标 Y
+    let resizeStartWidth = 0;      // 缩放起始宽度
+    let resizeStartHeight = 0;     // 缩放起始高度
+    let resizeHandlesContainer = null; // 手柄容器 DOM
+
     // 撤销/重做历史栈
     const undoStack = [];
     const redoStack = [];
@@ -93,6 +102,18 @@
                     action.oldParent.appendChild(action.element);
                 }
                 break;
+            case 'add':
+                // 撤销添加：移除新插入的元素
+                if (action.element === selectedElement) {
+                    deselectElement();
+                }
+                action.element.remove();
+                break;
+            case 'resize':
+                // 撤销缩放：恢复原始尺寸
+                action.element.style.width = action.oldWidth;
+                action.element.style.height = action.oldHeight;
+                break;
         }
         // 同步更新 Side Panel 的样式面板
         if (action.element === selectedElement) {
@@ -125,6 +146,23 @@
                     action.newParent.insertBefore(action.element, action.newNextSibling);
                 } else {
                     action.newParent.appendChild(action.element);
+                }
+                break;
+            case 'add':
+                // 重做添加：重新插入元素到原位置
+                if (action.nextSibling && action.parent.contains(action.nextSibling)) {
+                    action.parent.insertBefore(action.element, action.nextSibling);
+                } else {
+                    action.parent.appendChild(action.element);
+                }
+                selectElement(action.element);
+                break;
+            case 'resize':
+                // 重做缩放：应用新尺寸
+                action.element.style.width = action.newWidth;
+                action.element.style.height = action.newHeight;
+                if (action.element === selectedElement) {
+                    updateResizeHandles();
                 }
                 break;
         }
@@ -161,7 +199,7 @@
 
     /** 鼠标移入元素时的高亮处理 */
     function handleMouseOver(event) {
-        if (!isEditMode || isTextEditing || isDragging) return;
+        if (!isEditMode || isTextEditing || isDragging || isResizing) return;
         const target = event.target;
 
         // 忽略自己的 UI 元素
@@ -187,11 +225,11 @@
 
     /** 点击选中元素 */
     function handleClick(event) {
-        if (!isEditMode || isTextEditing || isDragging) return;
+        if (!isEditMode || isTextEditing || isDragging || isResizing) return;
 
         const target = event.target;
-        // 忽略自己的 UI 元素
-        if (target.closest('.webedit-overlay')) return;
+        // 忽略自己的 UI 元素（包括缩放手柄）
+        if (target.closest('.webedit-overlay') || target.closest('.webedit-resize-handles')) return;
 
         event.preventDefault();
         event.stopPropagation();
@@ -208,6 +246,9 @@
         element.classList.add('webedit-selected');
         element.classList.remove('webedit-hover');
 
+        // 创建缩放手柄
+        createResizeHandles(element);
+
         // 发送元素样式信息到 Side Panel
         sendElementStyles(element);
     }
@@ -220,6 +261,176 @@
             isTextEditing = false;
             selectedElement = null;
         }
+        // 销毁缩放手柄
+        removeResizeHandles();
+    }
+
+    // =====================================================
+    // 缩放手柄
+    // =====================================================
+
+    /** 8个手柄方向及对应的光标样式 */
+    const RESIZE_DIRECTIONS = [
+        { name: 'nw', cursor: 'nwse-resize' },
+        { name: 'n', cursor: 'ns-resize' },
+        { name: 'ne', cursor: 'nesw-resize' },
+        { name: 'w', cursor: 'ew-resize' },
+        { name: 'e', cursor: 'ew-resize' },
+        { name: 'sw', cursor: 'nesw-resize' },
+        { name: 's', cursor: 'ns-resize' },
+        { name: 'se', cursor: 'nwse-resize' },
+    ];
+
+    /** 创建8个缩放手柄并附加到页面 */
+    function createResizeHandles(element) {
+        removeResizeHandles();
+
+        resizeHandlesContainer = document.createElement('div');
+        resizeHandlesContainer.classList.add('webedit-resize-handles', 'webedit-overlay');
+
+        RESIZE_DIRECTIONS.forEach(dir => {
+            const handle = document.createElement('div');
+            handle.classList.add('webedit-resize-handle', `webedit-resize-${dir.name}`);
+            handle.style.cursor = dir.cursor;
+            handle.dataset.direction = dir.name;
+            resizeHandlesContainer.appendChild(handle);
+        });
+
+        document.body.appendChild(resizeHandlesContainer);
+        updateResizeHandles();
+
+        // 监听缩放手柄的鼠标按下
+        resizeHandlesContainer.addEventListener('mousedown', handleResizeMouseDown);
+    }
+
+    /** 移除缩放手柄 */
+    function removeResizeHandles() {
+        if (resizeHandlesContainer) {
+            resizeHandlesContainer.removeEventListener('mousedown', handleResizeMouseDown);
+            resizeHandlesContainer.remove();
+            resizeHandlesContainer = null;
+        }
+    }
+
+    /** 根据选中元素的位置更新手柄定位 */
+    function updateResizeHandles() {
+        if (!resizeHandlesContainer || !selectedElement) return;
+
+        const rect = selectedElement.getBoundingClientRect();
+        const scrollX = window.scrollX || document.documentElement.scrollLeft;
+        const scrollY = window.scrollY || document.documentElement.scrollTop;
+
+        // 容器覆盖在选中元素上方（绝对定位）
+        const top = rect.top + scrollY;
+        const left = rect.left + scrollX;
+        const width = rect.width;
+        const height = rect.height;
+
+        resizeHandlesContainer.style.cssText = `
+            position: absolute;
+            top: ${top}px;
+            left: ${left}px;
+            width: ${width}px;
+            height: ${height}px;
+            pointer-events: none;
+            z-index: 2147483645;
+        `;
+
+        // 每个手柄启用 pointer-events
+        resizeHandlesContainer.querySelectorAll('.webedit-resize-handle').forEach(h => {
+            h.style.pointerEvents = 'auto';
+        });
+    }
+
+    /** 手柄按下：开始缩放 */
+    function handleResizeMouseDown(event) {
+        const handle = event.target;
+        if (!handle.classList.contains('webedit-resize-handle')) return;
+        if (!selectedElement) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        isResizing = true;
+        resizeHandle = handle.dataset.direction;
+        resizeStartX = event.clientX;
+        resizeStartY = event.clientY;
+
+        const computed = getComputedStyle(selectedElement);
+        resizeStartWidth = parseFloat(computed.width);
+        resizeStartHeight = parseFloat(computed.height);
+
+        // 记录旧值用于撤销
+        handle._oldWidth = selectedElement.style.width || '';
+        handle._oldHeight = selectedElement.style.height || '';
+
+        document.addEventListener('mousemove', handleResizeMouseMove, true);
+        document.addEventListener('mouseup', handleResizeMouseUp, true);
+        document.body.classList.add('webedit-resizing');
+    }
+
+    /** 鼠标移动：实时缩放 */
+    function handleResizeMouseMove(event) {
+        if (!isResizing || !selectedElement) return;
+
+        const dx = event.clientX - resizeStartX;
+        const dy = event.clientY - resizeStartY;
+        const dir = resizeHandle;
+
+        let newWidth = resizeStartWidth;
+        let newHeight = resizeStartHeight;
+
+        // 根据方向计算新尺寸
+        if (dir.includes('e')) newWidth = Math.max(20, resizeStartWidth + dx);
+        if (dir.includes('w')) newWidth = Math.max(20, resizeStartWidth - dx);
+        if (dir.includes('s')) newHeight = Math.max(20, resizeStartHeight + dy);
+        if (dir.includes('n')) newHeight = Math.max(20, resizeStartHeight - dy);
+
+        // 应用新尺寸
+        if (dir.includes('e') || dir.includes('w')) {
+            selectedElement.style.width = newWidth + 'px';
+        }
+        if (dir.includes('s') || dir.includes('n')) {
+            selectedElement.style.height = newHeight + 'px';
+        }
+
+        // 更新手柄位置
+        updateResizeHandles();
+    }
+
+    /** 鼠标松开：结束缩放，记录撤销 */
+    function handleResizeMouseUp(event) {
+        if (!isResizing) return;
+
+        document.removeEventListener('mousemove', handleResizeMouseMove, true);
+        document.removeEventListener('mouseup', handleResizeMouseUp, true);
+        document.body.classList.remove('webedit-resizing');
+
+        // 记录操作到历史栈
+        if (selectedElement) {
+            const handle = resizeHandlesContainer?.querySelector(`[data-direction="${resizeHandle}"]`);
+            const oldWidth = handle?._oldWidth || '';
+            const oldHeight = handle?._oldHeight || '';
+
+            // 只有尺寸确实变了才记录
+            if (selectedElement.style.width !== oldWidth || selectedElement.style.height !== oldHeight) {
+                pushAction({
+                    type: 'resize',
+                    element: selectedElement,
+                    oldWidth,
+                    oldHeight,
+                    newWidth: selectedElement.style.width,
+                    newHeight: selectedElement.style.height,
+                });
+            }
+
+            // 同步面板
+            sendElementStyles(selectedElement);
+            updateResizeHandles();
+        }
+
+        isResizing = false;
+        resizeHandle = null;
     }
 
     /** 读取并发送元素的计算样式到 Side Panel */
@@ -417,6 +628,135 @@
     }
 
     // =====================================================
+    // 添加元素
+    // =====================================================
+
+    /**
+     * 向页面插入新的 DOM 元素
+     * @param {string} elementType - 元素类型标识
+     */
+    function addElement(elementType) {
+        if (!isEditMode) return;
+
+        const newElement = createElement(elementType);
+        if (!newElement) return;
+
+        // 标记为 WebEdit 添加的元素
+        newElement.classList.add('webedit-added-element');
+
+        // 确定插入位置
+        let parent;
+        let nextSibling;
+        if (selectedElement && selectedElement !== document.body && selectedElement !== document.documentElement) {
+            // 有选中元素：在其后方插入
+            parent = selectedElement.parentElement;
+            nextSibling = selectedElement.nextSibling;
+            if (nextSibling) {
+                parent.insertBefore(newElement, nextSibling);
+            } else {
+                parent.appendChild(newElement);
+            }
+        } else {
+            // 无选中元素：插入到 body 末尾
+            parent = document.body;
+            nextSibling = null;
+            parent.appendChild(newElement);
+        }
+
+        // 记录到历史栈（支持撤销）
+        pushAction({
+            type: 'add',
+            element: newElement,
+            parent,
+            nextSibling: newElement.nextSibling, // 记录插入后的下一个兄弟
+        });
+
+        // 自动选中新元素
+        selectElement(newElement);
+
+        // 滚动到新元素可见区域
+        newElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    /**
+     * 根据类型创建具体的 DOM 元素
+     * @param {string} type - 元素类型
+     * @returns {HTMLElement|null}
+     */
+    function createElement(type) {
+        let el;
+
+        switch (type) {
+            case 'text':
+                el = document.createElement('p');
+                el.textContent = '这是一段新的文本内容，双击可以编辑。';
+                el.style.cssText = 'padding: 8px 0; margin: 8px 0; font-size: 16px; line-height: 1.6; color: inherit;';
+                break;
+
+            case 'heading':
+                el = document.createElement('h2');
+                el.textContent = '新标题';
+                el.style.cssText = 'padding: 4px 0; margin: 16px 0 8px; font-size: 24px; font-weight: 700; color: inherit;';
+                break;
+
+            case 'button':
+                el = document.createElement('button');
+                el.textContent = '按钮';
+                el.type = 'button';
+                el.style.cssText = 'display: inline-block; padding: 10px 24px; margin: 8px 0; font-size: 14px; font-weight: 500; color: #ffffff; background: #3b82f6; border: none; border-radius: 6px; cursor: pointer;';
+                break;
+
+            case 'divider':
+                el = document.createElement('hr');
+                el.style.cssText = 'border: none; border-top: 1px solid #d1d5db; margin: 16px 0;';
+                break;
+
+            case 'box':
+                el = document.createElement('div');
+                el.style.cssText = 'width: 100%; height: 120px; margin: 8px 0; background: linear-gradient(135deg, #3b82f6, #8b5cf6); border-radius: 8px;';
+                break;
+
+            case 'image':
+                el = document.createElement('div');
+                el.style.cssText = 'width: 100%; height: 200px; margin: 8px 0; background: #f3f4f6; border: 2px dashed #d1d5db; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #9ca3af; font-size: 14px;';
+                el.textContent = '🖼️ 图片占位区域';
+                break;
+
+            case 'circle':
+                el = document.createElement('div');
+                el.style.cssText = 'width: 120px; height: 120px; margin: 8px auto; background: linear-gradient(135deg, #06b6d4, #3b82f6); border-radius: 50%;';
+                break;
+
+            case 'square':
+                el = document.createElement('div');
+                el.style.cssText = 'width: 120px; height: 120px; margin: 8px auto; background: linear-gradient(135deg, #f59e0b, #ef4444); border-radius: 0;';
+                break;
+
+            case 'link':
+                el = document.createElement('a');
+                el.textContent = '链接文本';
+                el.href = '#';
+                el.style.cssText = 'display: inline-block; padding: 4px 0; margin: 8px 0; font-size: 16px; color: #3b82f6; text-decoration: underline; cursor: pointer;';
+                break;
+
+            case 'list':
+                el = document.createElement('ul');
+                el.style.cssText = 'padding: 8px 0 8px 24px; margin: 8px 0; font-size: 16px; line-height: 1.8; color: inherit;';
+                ['列表项 1', '列表项 2', '列表项 3'].forEach(text => {
+                    const li = document.createElement('li');
+                    li.textContent = text;
+                    el.appendChild(li);
+                });
+                break;
+
+            default:
+                return null;
+        }
+
+        return el;
+    }
+
+    // =====================================================
     // 拖拽功能
     // =====================================================
 
@@ -526,7 +866,7 @@
 
         // 确定要插入的参考元素（向上找到与拖拽元素同级别的元素）
         let targetEl = findDropSibling(elementBelow);
-        if (!targetEl || targetEl === dragElement || dragElement.contains(targetEl)) {
+        if (!targetEl || targetEl === dragElement || dragElement.contains(targetEl) || targetEl.contains(dragElement)) {
             clearDropTarget();
             return;
         }
@@ -563,14 +903,16 @@
     }
 
     /**
-     * 查找合适的放置兄弟元素
-     * 优先寻找与被拖拽元素处于同一父容器的兄弟，
-     * 如果没有，就使用鼠标下方的元素本身
+     * 查找合适的放置目标元素
+     * 策略：
+     * 1. 优先找与被拖拽元素同一父容器下的兄弟
+     * 2. 跨容器拖放时，找鼠标下方最近的块级元素
+     * 3. 过滤掉被拖拽元素的祖先（不能把自己放进自己里面）
      */
     function findDropSibling(el) {
         if (!el || el === document.body || el === document.documentElement) return null;
 
-        // 如果拖拽元素有父容器，优先在同一父容器内寻找
+        // 第 1 步：搜索同一父容器内的兄弟元素（向上遍历鼠标下方元素的祖先链）
         const dragParent = dragElement.parentElement;
         let current = el;
         while (current && current !== document.body) {
@@ -580,18 +922,31 @@
             current = current.parentElement;
         }
 
-        // 如果找不到同级元素，允许跨容器拖放
-        // 返回鼠标下方的最近块级元素
+        // 第 2 步：跨容器拖放 —— 找鼠标下方最近的合适元素
+        // 从鼠标下方的元素开始，向上查找第一个块级元素
         current = el;
         while (current && current !== document.body) {
+            // 关键检查：跳过 dragElement 的祖先链（不能把元素放进自己的父/祖容器里）
+            if (current === dragElement || current.contains(dragElement)) {
+                current = current.parentElement;
+                continue;
+            }
+
             const display = getComputedStyle(current).display;
             if (display === 'block' || display === 'flex' || display === 'grid' ||
-                display === 'list-item' || display === 'table') {
+                display === 'list-item' || display === 'table' ||
+                display === 'inline-block' || display === 'flow-root') {
                 return current;
             }
             current = current.parentElement;
         }
-        return el;
+
+        // 第 3 步：最终回退，如果鼠标下方元素本身不是 dragElement 也不包含它
+        if (el !== dragElement && !el.contains(dragElement)) {
+            return el;
+        }
+
+        return null;
     }
 
     /** 清除放置目标的高亮 */
@@ -773,7 +1128,7 @@
         const editClasses = [
             'webedit-active', 'webedit-hover', 'webedit-selected', 'webedit-hidden-element',
             'webedit-dragging', 'webedit-drag-source', 'webedit-drag-ghost',
-            'webedit-drop-indicator', 'webedit-drop-target'
+            'webedit-drop-indicator', 'webedit-drop-target', 'webedit-added-element'
         ];
         const elementsWithEditClasses = [];
 
@@ -784,8 +1139,8 @@
             });
         });
 
-        // 移除拖拽产生的临时 DOM 元素
-        document.querySelectorAll('.webedit-drag-ghost, .webedit-drop-indicator').forEach(el => el.remove());
+        // 移除拖拽和缩放产生的临时 DOM 元素
+        document.querySelectorAll('.webedit-drag-ghost, .webedit-drop-indicator, .webedit-resize-handles').forEach(el => el.remove());
 
         // 移除 contentEditable 属性
         document.querySelectorAll('[contenteditable="true"]').forEach(el => {
@@ -840,6 +1195,11 @@
 
             case 'REDO':
                 redo();
+                sendResponse({ success: true });
+                break;
+
+            case 'ADD_ELEMENT':
+                addElement(payload.elementType);
                 sendResponse({ success: true });
                 break;
 

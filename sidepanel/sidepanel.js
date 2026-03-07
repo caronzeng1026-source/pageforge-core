@@ -70,6 +70,11 @@
         // 保存
         saveSection: document.getElementById('save-section'),
         btnSave: document.getElementById('btn-save'),
+
+        // Tab 栏
+        tabBar: document.getElementById('tab-bar'),
+        tabEdit: document.getElementById('tab-edit'),
+        tabInsert: document.getElementById('tab-insert'),
     };
 
     // =====================================================
@@ -103,6 +108,14 @@
         // 撤销/重做
         elements.undoBtn.addEventListener('click', () => sendAction('UNDO'));
         elements.redoBtn.addEventListener('click', () => sendAction('REDO'));
+
+        // Tab 切换
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tabName = btn.dataset.tab;
+                switchTab(tabName);
+            });
+        });
 
         // 文本样式
         elements.fontFamily.addEventListener('change', () => applyStyle({ fontFamily: elements.fontFamily.value }));
@@ -197,6 +210,19 @@
         elements.btnHide.addEventListener('click', () => sendElementAction('hide'));
         elements.btnDelete.addEventListener('click', () => sendElementAction('delete'));
 
+        // 添加元素按钮
+        document.querySelectorAll('.add-element-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const elementType = btn.dataset.elementType;
+                if (elementType && currentTabId) {
+                    chrome.runtime.sendMessage({
+                        type: 'ADD_ELEMENT',
+                        payload: { tabId: currentTabId, elementType }
+                    });
+                }
+            });
+        });
+
         // 保存
         elements.btnSave.addEventListener('click', savePage);
 
@@ -229,14 +255,31 @@
         elements.undoBtn.disabled = !isEditing;
         elements.redoBtn.disabled = !isEditing;
 
+        // 显示/隐藏 Tab 栏
+        elements.tabBar.style.display = isEditing ? 'flex' : 'none';
+
         if (!isEditing) {
             showNoSelection();
+            // 关闭编辑模式时重置到编辑 Tab
+            switchTab('edit');
         }
 
         chrome.runtime.sendMessage({
             type: 'TOGGLE_EDIT_MODE',
             payload: { tabId: currentTabId, isEditing }
         });
+    }
+
+    /** 切换 Tab 页 */
+    function switchTab(tabName) {
+        // 更新 Tab 按钮状态
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.tab === tabName);
+        });
+
+        // 切换 Tab 内容区
+        elements.tabEdit.style.display = tabName === 'edit' ? 'block' : 'none';
+        elements.tabInsert.style.display = tabName === 'insert' ? 'block' : 'none';
     }
 
     // =====================================================
@@ -280,33 +323,43 @@
         elements.elementPath.textContent = payload.path;
         elements.elementPath.title = payload.path;
 
+        // 自动切换到编辑 Tab（从插入 Tab 添加元素后能立即看到属性面板）
+        switchTab('edit');
+
         // 同步控件值
         syncControlsFromStyles(payload.styles);
     }
 
     /** 将元素的计算样式同步到面板控件 */
     function syncControlsFromStyles(styles) {
+        // 获取当前聚焦的控件，防止回写覆盖用户正在输入的内容
+        const focused = document.activeElement;
+
         // 字体（尝试匹配下拉选项）
-        const fontOptions = elements.fontFamily.options;
-        let fontMatched = false;
-        for (let i = 0; i < fontOptions.length; i++) {
-            if (styles.fontFamily.includes(fontOptions[i].text)) {
-                elements.fontFamily.selectedIndex = i;
-                fontMatched = true;
-                break;
+        if (focused !== elements.fontFamily) {
+            const fontOptions = elements.fontFamily.options;
+            let fontMatched = false;
+            for (let i = 0; i < fontOptions.length; i++) {
+                if (styles.fontFamily.includes(fontOptions[i].text)) {
+                    elements.fontFamily.selectedIndex = i;
+                    fontMatched = true;
+                    break;
+                }
             }
-        }
-        if (!fontMatched) {
-            elements.fontFamily.selectedIndex = 0;
+            if (!fontMatched) {
+                elements.fontFamily.selectedIndex = 0;
+            }
         }
 
         // 字号
-        elements.fontSize.value = parseInt(styles.fontSize) || 16;
+        if (focused !== elements.fontSize) {
+            elements.fontSize.value = parseInt(styles.fontSize) || 16;
+        }
 
         // 文字颜色
         const textColorHex = rgbToHex(styles.color);
-        elements.textColor.value = textColorHex;
-        elements.textColorHex.value = textColorHex;
+        if (focused !== elements.textColor) elements.textColor.value = textColorHex;
+        if (focused !== elements.textColorHex) elements.textColorHex.value = textColorHex;
 
         // 文字样式
         elements.btnBold.classList.toggle('active',
@@ -321,33 +374,44 @@
 
         // 背景颜色
         const bgColorHex = rgbToHex(styles.backgroundColor);
-        elements.bgColor.value = bgColorHex;
-        elements.bgColorHex.value = bgColorHex === '#000000' && styles.backgroundColor.includes('rgba(0, 0, 0, 0)')
-            ? 'transparent' : bgColorHex;
+        if (focused !== elements.bgColor) elements.bgColor.value = bgColorHex;
+        if (focused !== elements.bgColorHex) {
+            elements.bgColorHex.value = bgColorHex === '#000000' && styles.backgroundColor.includes('rgba(0, 0, 0, 0)')
+                ? 'transparent' : bgColorHex;
+        }
 
         // 透明度
-        elements.opacity.value = styles.opacity;
-        elements.opacityValue.textContent = styles.opacity;
+        if (focused !== elements.opacity) {
+            elements.opacity.value = styles.opacity;
+            elements.opacityValue.textContent = styles.opacity;
+        }
 
         // 圆角
-        elements.borderRadius.value = parseInt(styles.borderRadius) || 0;
+        if (focused !== elements.borderRadius) {
+            elements.borderRadius.value = parseInt(styles.borderRadius) || 0;
+        }
 
         // 边框
-        elements.borderWidth.value = parseInt(styles.borderWidth) || 0;
-        // 解析 border-style
-        const borderStyleValue = styles.borderStyle.split(' ')[0] || 'none';
-        elements.borderStyle.value = borderStyleValue;
-        elements.borderColor.value = rgbToHex(styles.borderColor);
+        if (focused !== elements.borderWidth) {
+            elements.borderWidth.value = parseInt(styles.borderWidth) || 0;
+        }
+        if (focused !== elements.borderStyle) {
+            const borderStyleValue = styles.borderStyle.split(' ')[0] || 'none';
+            elements.borderStyle.value = borderStyleValue;
+        }
+        if (focused !== elements.borderColor) {
+            elements.borderColor.value = rgbToHex(styles.borderColor);
+        }
 
         // 间距
-        elements.paddingTop.value = parseInt(styles.paddingTop) || 0;
-        elements.paddingRight.value = parseInt(styles.paddingRight) || 0;
-        elements.paddingBottom.value = parseInt(styles.paddingBottom) || 0;
-        elements.paddingLeft.value = parseInt(styles.paddingLeft) || 0;
-        elements.marginTop.value = parseInt(styles.marginTop) || 0;
-        elements.marginRight.value = parseInt(styles.marginRight) || 0;
-        elements.marginBottom.value = parseInt(styles.marginBottom) || 0;
-        elements.marginLeft.value = parseInt(styles.marginLeft) || 0;
+        if (focused !== elements.paddingTop) elements.paddingTop.value = parseInt(styles.paddingTop) || 0;
+        if (focused !== elements.paddingRight) elements.paddingRight.value = parseInt(styles.paddingRight) || 0;
+        if (focused !== elements.paddingBottom) elements.paddingBottom.value = parseInt(styles.paddingBottom) || 0;
+        if (focused !== elements.paddingLeft) elements.paddingLeft.value = parseInt(styles.paddingLeft) || 0;
+        if (focused !== elements.marginTop) elements.marginTop.value = parseInt(styles.marginTop) || 0;
+        if (focused !== elements.marginRight) elements.marginRight.value = parseInt(styles.marginRight) || 0;
+        if (focused !== elements.marginBottom) elements.marginBottom.value = parseInt(styles.marginBottom) || 0;
+        if (focused !== elements.marginLeft) elements.marginLeft.value = parseInt(styles.marginLeft) || 0;
     }
 
     // =====================================================

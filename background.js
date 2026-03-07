@@ -47,6 +47,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       break;
     }
 
+    // Side Panel → Content Script：添加元素
+    case 'ADD_ELEMENT': {
+      chrome.tabs.sendMessage(payload.tabId, {
+        type: 'ADD_ELEMENT',
+        payload: { elementType: payload.elementType }
+      });
+      sendResponse({ success: true });
+      break;
+    }
+
     // Side Panel → Content Script：撤销/重做
     case 'UNDO':
     case 'REDO': {
@@ -73,7 +83,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       chrome.runtime.sendMessage({
         type: 'EDIT_MODE_CHANGED',
         payload: message.payload
-      }).catch(() => {});
+      }).catch(() => { });
       sendResponse({ success: true });
       break;
     }
