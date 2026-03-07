@@ -10,6 +10,7 @@
     let isEditing = false;
     let currentTabId = null;
     let currentElementStyles = null;
+    let currentTheme = 'theme-dark'; // 默认主题
 
     /** 安全发送扩展消息，防止 Extension context invalidated */
     function safeSendMessage(message, callback) {
@@ -40,6 +41,9 @@
         // 撤销/重做
         undoBtn: document.getElementById('btn-undo'),
         redoBtn: document.getElementById('btn-redo'),
+
+        // 主题选择
+        themeSelector: document.getElementById('theme-selector'),
 
         // 面板显示切换
         noSelection: document.getElementById('no-selection'),
@@ -114,11 +118,10 @@
         gridAlignItems: document.getElementById('grid-align-items'),
     };
 
-    // =====================================================
-    // 初始化
-    // =====================================================
-
     async function init() {
+        // 加载并应用主题
+        await loadTheme();
+
         // 获取当前标签页
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (tab) {
@@ -138,10 +141,47 @@
     }
 
     // =====================================================
+    // 主题管理
+    // =====================================================
+
+    async function loadTheme() {
+        return new Promise((resolve) => {
+            chrome.storage.local.get(['webedit_theme'], (result) => {
+                if (result.webedit_theme) {
+                    currentTheme = result.webedit_theme;
+                }
+                applyTheme(currentTheme);
+                if (elements.themeSelector) {
+                    elements.themeSelector.value = currentTheme;
+                }
+                resolve();
+            });
+        });
+    }
+
+    function applyTheme(themeName) {
+        document.body.className = document.body.className.replace(/\btheme-[a-z]+\b/g, '').trim();
+        if (themeName) document.body.classList.add(themeName);
+    }
+
+    function saveTheme(themeName) {
+        currentTheme = themeName;
+        applyTheme(themeName);
+        chrome.storage.local.set({ webedit_theme: themeName });
+    }
+
+    // =====================================================
     // 事件绑定
     // =====================================================
 
     function bindEvents() {
+        // 主题切换
+        if (elements.themeSelector) {
+            elements.themeSelector.addEventListener('change', (e) => {
+                saveTheme(e.target.value);
+            });
+        }
+
         // 编辑模式切换
         elements.toggleBtn.addEventListener('click', toggleEditMode);
 

@@ -11,7 +11,15 @@
 }
 
 :root {
-    /* 深色主题色板 */
+    /* 通用圆角与动画，各主题共享 */
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --transition: 0.2s ease;
+}
+
+/* 1. 暗色主题 (Dark - Default) */
+body.theme-dark {
     --bg-primary: #0f1117;
     --bg-secondary: #1a1d27;
     --bg-tertiary: #242836;
@@ -37,13 +45,116 @@
 
     --border: #2a2f3e;
     --border-focus: #3b82f6;
-
-    --radius-sm: 6px;
-    --radius-md: 8px;
-    --radius-lg: 12px;
-
-    --transition: 0.15s ease;
 }
+
+/* 2. 浅色主题 (Light - Minimal) */
+body.theme-light {
+    --bg-primary: #f8fafc;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #f1f5f9;
+    --bg-hover: #e2e8f0;
+    --bg-active: #cbd5e1;
+
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #94a3b8;
+
+    --accent: #0f172a;
+    --accent-hover: #334155;
+    --accent-glow: rgba(15, 23, 42, 0.15);
+    --accent-soft: rgba(15, 23, 42, 0.05);
+
+    --success: #059669;
+    --success-glow: rgba(5, 150, 105, 0.15);
+
+    --warning: #d97706;
+    --danger: #dc2626;
+    --danger-hover: #b91c1c;
+    --danger-glow: rgba(220, 38, 38, 0.15);
+
+    --border: #e2e8f0;
+    --border-focus: #0f172a;
+}
+
+/* 3. 玻璃态主题 (Glass - Modern SaaS) */
+body.theme-glass {
+    --bg-primary: #fdf2f8;
+    /* background overlay */
+    --bg-secondary: rgba(255, 255, 255, 0.7);
+    --bg-tertiary: rgba(255, 255, 255, 0.5);
+    --bg-hover: rgba(255, 255, 255, 0.9);
+    --bg-active: rgba(255, 255, 255, 1);
+
+    --text-primary: #831843;
+    --text-secondary: #be185d;
+    --text-muted: #f472b6;
+
+    --accent: #db2777;
+    --accent-hover: #be185d;
+    --accent-glow: rgba(219, 39, 119, 0.15);
+    --accent-soft: rgba(219, 39, 119, 0.1);
+
+    --success: #059669;
+    --success-glow: rgba(5, 150, 105, 0.15);
+
+    --warning: #ca8a04;
+    --danger: #e11d48;
+    --danger-hover: #be123c;
+    --danger-glow: rgba(225, 29, 72, 0.15);
+
+    --border: rgba(255, 255, 255, 0.5);
+    --border-focus: #db2777;
+}
+
+/* 给 body 添加渐变背景，突出玻璃感 */
+body.theme-glass {
+    background: linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%);
+}
+
+body.theme-glass .panel-header,
+body.theme-glass .element-info,
+body.theme-glass .section-header,
+body.theme-glass .tab-bar,
+body.theme-glass .edit-toggle-btn {
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+/* 4. 赛博朋克主题 (Cyber - Dark + Neon) */
+body.theme-cyber {
+    --bg-primary: #000000;
+    --bg-secondary: #111111;
+    --bg-tertiary: #1a1a1a;
+    --bg-hover: #222222;
+    --bg-active: #333333;
+
+    --text-primary: #facc15;
+    /* neon yellow */
+    --text-secondary: #a1a1aa;
+    --text-muted: #52525b;
+
+    --accent: #facc15;
+    --accent-hover: #ca8a04;
+    --accent-glow: rgba(250, 204, 21, 0.3);
+    --accent-soft: rgba(250, 204, 21, 0.1);
+
+    --success: #4ade80;
+    --success-glow: rgba(74, 222, 128, 0.2);
+
+    --warning: #fb923c;
+    --danger: #f87171;
+    --danger-hover: #ef4444;
+    --danger-glow: rgba(248, 113, 113, 0.2);
+
+    --border: #333333;
+    --border-focus: #facc15;
+
+    /* 重写圆角，偏向锐利 */
+    --radius-sm: 0px;
+    --radius-md: 2px;
+    --radius-lg: 4px;
+}
+
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
@@ -121,6 +232,36 @@ body {
 .icon-btn:disabled {
     opacity: 0.3;
     cursor: not-allowed;
+}
+
+/* 主题选择器 */
+.theme-select {
+    height: 30px;
+    padding: 0 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    outline: none;
+    transition: all var(--transition);
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%239aa0b0' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 24px;
+}
+
+.theme-select:hover {
+    border-color: var(--text-muted);
+}
+
+.theme-select:focus {
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 2px var(--accent-glow);
 }
 
 /* ==================== 编辑模式开关 ==================== */
@@ -299,11 +440,13 @@ body {
     text-align: center;
     outline: none;
     transition: border-color var(--transition);
+    appearance: textfield;
     -moz-appearance: textfield;
 }
 
 .number-input::-webkit-inner-spin-button,
 .number-input::-webkit-outer-spin-button {
+    appearance: none;
     -webkit-appearance: none;
     margin: 0;
 }
@@ -620,11 +763,13 @@ body {
 .add-element-btn svg {
     flex-shrink: 0;
     opacity: 0.7;
-    transition: opacity 0.15s ease;
+    color: currentColor;
+    transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
 .add-element-btn:hover svg {
     opacity: 1;
+    transform: scale(1.05);
 }
 
 /* ==================== 操作按钮 ==================== */
