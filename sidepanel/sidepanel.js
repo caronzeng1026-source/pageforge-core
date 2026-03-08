@@ -1,4 +1,4 @@
-// WebEdit Side Panel 交互逻辑
+// PageForge Side Panel 交互逻辑
 // 负责：控件事件绑定、样式同步、与 Content Script 的消息通信
 
 (() => {
@@ -26,7 +26,7 @@
                 });
             }
         } catch (error) {
-            console.warn('WebEdit: Failed to send message', error);
+            console.warn('PageForge: Failed to send message', error);
         }
     }
 
@@ -155,9 +155,9 @@
 
     async function loadTheme() {
         return new Promise((resolve) => {
-            chrome.storage.local.get(['webedit_theme'], (result) => {
-                if (result.webedit_theme) {
-                    currentTheme = result.webedit_theme;
+            chrome.storage.local.get(['pageforge_theme'], (result) => {
+                if (result.pageforge_theme) {
+                    currentTheme = result.pageforge_theme;
                 }
                 applyTheme(currentTheme);
                 if (elements.themeSelector) {
@@ -176,7 +176,7 @@
     function saveTheme(themeName) {
         currentTheme = themeName;
         applyTheme(themeName);
-        chrome.storage.local.set({ webedit_theme: themeName });
+        chrome.storage.local.set({ pageforge_theme: themeName });
     }
 
     // =====================================================
@@ -819,7 +819,7 @@
 
     async function saveHtmlPage() {
         if (!currentTabId) {
-            console.error('WebEdit: No currentTabId');
+            console.error('PageForge: No currentTabId');
             return;
         }
 
@@ -831,13 +831,13 @@
             const baseName = await getBaseFileName();
             const fileName = `${baseName}.html`;
 
-            console.log('WebEdit: Requesting HTML from content script...');
+            console.log('PageForge: Requesting HTML from content script...');
             safeSendMessage({
                 type: 'GET_PAGE_HTML',
                 payload: { tabId: currentTabId }
             }, (response) => {
                 if (chrome.runtime.lastError) {
-                    console.error('WebEdit: Runtime error:', chrome.runtime.lastError.message);
+                    console.error('PageForge: Runtime error:', chrome.runtime.lastError.message);
                     alert('无法获取页面数据：' + chrome.runtime.lastError.message);
                     elements.btnSaveHtml.innerHTML = originalBtnText;
                     elements.btnSaveHtml.disabled = false;
@@ -845,7 +845,7 @@
                 }
 
                 if (response && response.html) {
-                    console.log('WebEdit: Received HTML, initiating download...');
+                    console.log('PageForge: Received HTML, initiating download...');
                     safeSendMessage({
                         type: 'SAVE_PAGE',
                         payload: { content: response.html, fileName, mimeType: 'text/html' }
@@ -853,18 +853,18 @@
                         elements.btnSaveHtml.innerHTML = originalBtnText;
                         elements.btnSaveHtml.disabled = false;
                         if (chrome.runtime.lastError) {
-                            console.error('WebEdit: Save error:', chrome.runtime.lastError.message);
+                            console.error('PageForge: Save error:', chrome.runtime.lastError.message);
                         }
                     });
                 } else {
-                    console.error('WebEdit: Content script returned empty HTML');
+                    console.error('PageForge: Content script returned empty HTML');
                     alert('导出失败：内容脚本未返回数据。请尝试刷新页面。');
                     elements.btnSaveHtml.innerHTML = originalBtnText;
                     elements.btnSaveHtml.disabled = false;
                 }
             });
         } catch (error) {
-            console.error('WebEdit: Unexpected error during HTML export:', error);
+            console.error('PageForge: Unexpected error during HTML export:', error);
             alert('导出发生意外错误，请查看控制台日志。');
             elements.btnSaveHtml.innerHTML = originalBtnText;
             elements.btnSaveHtml.disabled = false;
@@ -899,7 +899,7 @@
                 }
             });
         } catch (error) {
-            console.error('WebEdit: CSS export error:', error);
+            console.error('PageForge: CSS export error:', error);
             elements.btnSaveCss.innerHTML = originalBtnText;
             elements.btnSaveCss.disabled = false;
         }
@@ -933,7 +933,7 @@
                 }
             });
         } catch (error) {
-            console.error('WebEdit: Action log export error:', error);
+            console.error('PageForge: Action log export error:', error);
             elements.btnSaveJson.innerHTML = originalBtnText;
             elements.btnSaveJson.disabled = false;
         }

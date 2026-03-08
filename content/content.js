@@ -1,4 +1,4 @@
-// WebEdit Content Script - 页面编辑核心引擎
+// PageForge Content Script - 页面编辑核心引擎
 // 负责：元素高亮、选中、文本编辑、样式修改、撤销/重做
 
 (() => {
@@ -61,14 +61,14 @@
         } catch (error) {
             if (error && error.message && error.message.includes('Extension context invalidated')) {
                 // 插件被重载，清理旧的上下文 UI 和事件
-                console.warn('WebEdit: Extension context invalidated. Cleaning up...');
+                console.warn('PageForge: Extension context invalidated. Cleaning up...');
                 if (typeof disableEditMode === 'function') {
                     disableEditMode();
                 }
-                document.querySelectorAll('.webedit-overlay').forEach(el => el.remove());
-                document.body.classList.remove('webedit-active', 'webedit-resizing');
+                document.querySelectorAll('.pageforge-overlay').forEach(el => el.remove());
+                document.body.classList.remove('pageforge-active', 'pageforge-resizing');
             } else {
-                console.warn('WebEdit: Failed to send message', error);
+                console.warn('PageForge: Failed to send message', error);
             }
         }
     }
@@ -123,7 +123,7 @@
                 break;
             case 'hide':
                 action.element.style.display = action.oldValue;
-                action.element.classList.remove('webedit-hidden-element');
+                action.element.classList.remove('pageforge-hidden-element');
                 break;
             case 'delete':
                 // 恢复被删除的元素
@@ -194,7 +194,7 @@
                 const elementsToSelect = action.subActions.map(sa => sa.element);
                 elementsToSelect.forEach(el => {
                     selectedElements.push(el);
-                    el.classList.add('webedit-selected');
+                    el.classList.add('pageforge-selected');
                 });
                 selectedElement = selectedElements[selectedElements.length - 1];
                 sendElementStyles(selectedElement);
@@ -231,7 +231,7 @@
                 break;
             case 'hide':
                 action.element.style.display = 'none';
-                action.element.classList.add('webedit-hidden-element');
+                action.element.classList.add('pageforge-hidden-element');
                 break;
             case 'delete':
                 action.element.remove();
@@ -331,7 +331,7 @@
                 selector += `#${current.id}`;
             } else if (current.className && typeof current.className === 'string') {
                 const classes = current.className.trim().split(/\s+/)
-                    .filter(c => !c.startsWith('webedit-'))
+                    .filter(c => !c.startsWith('pageforge-'))
                     .slice(0, 2);
                 if (classes.length > 0) {
                     selector += '.' + classes.join('.');
@@ -349,21 +349,21 @@
         const target = event.target;
 
         // 忽略自己的 UI 元素
-        if (target.closest('.webedit-overlay') || target.classList.contains('webedit-selected')) return;
+        if (target.closest('.pageforge-overlay') || target.classList.contains('pageforge-selected')) return;
 
         if (hoveredElement && hoveredElement !== target) {
-            hoveredElement.classList.remove('webedit-hover');
+            hoveredElement.classList.remove('pageforge-hover');
         }
 
         hoveredElement = target;
-        target.classList.add('webedit-hover');
+        target.classList.add('pageforge-hover');
     }
 
     /** 鼠标移出元素时移除高亮 */
     function handleMouseOut(event) {
         if (!isEditMode) return;
         const target = event.target;
-        target.classList.remove('webedit-hover');
+        target.classList.remove('pageforge-hover');
         if (hoveredElement === target) {
             hoveredElement = null;
         }
@@ -375,7 +375,7 @@
 
         const target = event.target;
         // 忽略自己的 UI 元素（包括缩放手柄）
-        if (target.closest('.webedit-overlay') || target.closest('.webedit-resize-handles')) return;
+        if (target.closest('.pageforge-overlay') || target.closest('.pageforge-resize-handles')) return;
 
         event.preventDefault();
         event.stopPropagation();
@@ -396,7 +396,7 @@
         if (index > -1) {
             // 取消选中
             selectedElements.splice(index, 1);
-            element.classList.remove('webedit-selected');
+            element.classList.remove('pageforge-selected');
 
             if (selectedElements.length > 0) {
                 // 还有其他选中元素，更新主选中元素
@@ -410,8 +410,8 @@
             // 新增选中
             selectedElements.push(element);
             selectedElement = element;
-            element.classList.add('webedit-selected');
-            element.classList.remove('webedit-hover');
+            element.classList.add('pageforge-selected');
+            element.classList.remove('pageforge-hover');
 
             // 多选时移除缩放手柄，避免 UI 混乱
             removeResizeHandles();
@@ -428,8 +428,8 @@
 
         selectedElements = [element];
         selectedElement = element;
-        element.classList.add('webedit-selected');
-        element.classList.remove('webedit-hover');
+        element.classList.add('pageforge-selected');
+        element.classList.remove('pageforge-hover');
 
         // 创建缩放手柄
         createResizeHandles(element);
@@ -441,7 +441,7 @@
     /** 取消选中 */
     function deselectElement() {
         selectedElements.forEach(el => {
-            el.classList.remove('webedit-selected');
+            el.classList.remove('pageforge-selected');
             el.contentEditable = 'inherit';
         });
         isTextEditing = false;
@@ -473,11 +473,11 @@
         removeResizeHandles();
 
         resizeHandlesContainer = document.createElement('div');
-        resizeHandlesContainer.classList.add('webedit-resize-handles', 'webedit-overlay');
+        resizeHandlesContainer.classList.add('pageforge-resize-handles', 'pageforge-overlay');
 
         RESIZE_DIRECTIONS.forEach(dir => {
             const handle = document.createElement('div');
-            handle.classList.add('webedit-resize-handle', `webedit-resize-${dir.name}`);
+            handle.classList.add('pageforge-resize-handle', `pageforge-resize-${dir.name}`);
             handle.style.cursor = dir.cursor;
             handle.dataset.direction = dir.name;
             resizeHandlesContainer.appendChild(handle);
@@ -524,7 +524,7 @@
         `;
 
         // 每个手柄启用 pointer-events
-        resizeHandlesContainer.querySelectorAll('.webedit-resize-handle').forEach(h => {
+        resizeHandlesContainer.querySelectorAll('.pageforge-resize-handle').forEach(h => {
             h.style.pointerEvents = 'auto';
         });
     }
@@ -532,7 +532,7 @@
     /** 手柄按下：开始缩放 */
     function handleResizeMouseDown(event) {
         const handle = event.target;
-        if (!handle.classList.contains('webedit-resize-handle')) return;
+        if (!handle.classList.contains('pageforge-resize-handle')) return;
         if (!selectedElement || isPreviewingOriginal) return;
 
         event.preventDefault();
@@ -553,7 +553,7 @@
 
         document.addEventListener('mousemove', handleResizeMouseMove, true);
         document.addEventListener('mouseup', handleResizeMouseUp, true);
-        document.body.classList.add('webedit-resizing');
+        document.body.classList.add('pageforge-resizing');
     }
 
     /** 鼠标移动：实时缩放 */
@@ -591,7 +591,7 @@
 
         document.removeEventListener('mousemove', handleResizeMouseMove, true);
         document.removeEventListener('mouseup', handleResizeMouseUp, true);
-        document.body.classList.remove('webedit-resizing');
+        document.body.classList.remove('pageforge-resizing');
 
         // 记录操作到历史栈
         if (selectedElement) {
@@ -697,7 +697,7 @@
     function handleDoubleClick(event) {
         if (!isEditMode || isPreviewingOriginal) return;
         const target = event.target;
-        if (target.closest('.webedit-overlay')) return;
+        if (target.closest('.pageforge-overlay')) return;
 
         event.preventDefault();
         event.stopPropagation();
@@ -832,7 +832,7 @@
                 oldValue: oldDisplay || '',
             });
             element.style.display = 'none';
-            element.classList.add('webedit-hidden-element');
+            element.classList.add('pageforge-hidden-element');
         });
 
         pushAction({
@@ -890,9 +890,9 @@
         selectedElements.forEach(element => {
             const clone = element.cloneNode(true);
             const editClasses = [
-                'webedit-selected', 'webedit-hover', 'webedit-drag-source',
-                'webedit-drop-target', 'webedit-drop-zone', 'webedit-drop-zone-active',
-                'webedit-copy-flash'
+                'pageforge-selected', 'pageforge-hover', 'pageforge-drag-source',
+                'pageforge-drop-target', 'pageforge-drop-zone', 'pageforge-drop-zone-active',
+                'pageforge-copy-flash'
             ];
             editClasses.forEach(cls => {
                 clone.classList.remove(cls);
@@ -905,9 +905,9 @@
             wrap.appendChild(clone);
 
             // 视觉反馈：短暂绿色闪烁
-            element.classList.add('webedit-copy-flash');
+            element.classList.add('pageforge-copy-flash');
             setTimeout(() => {
-                element?.classList.remove('webedit-copy-flash');
+                element?.classList.remove('pageforge-copy-flash');
             }, 400);
         });
 
@@ -942,7 +942,7 @@
 
         const subActions = [];
         newElements.forEach(newElement => {
-            newElement.classList.add('webedit-added-element');
+            newElement.classList.add('pageforge-added-element');
 
             if (nextSibling && nextSibling.parentNode === parent) {
                 parent.insertBefore(newElement, nextSibling);
@@ -967,7 +967,7 @@
         deselectElement();
         newElements.forEach(el => {
             selectedElements.push(el);
-            el.classList.add('webedit-selected');
+            el.classList.add('pageforge-selected');
         });
         selectedElement = newElements[newElements.length - 1];
         sendElementStyles(selectedElement);
@@ -1006,8 +1006,8 @@
         const newElement = createElement(elementType);
         if (!newElement) return;
 
-        // 标记为 WebEdit 添加的元素
-        newElement.classList.add('webedit-added-element');
+        // 标记为 PageForge 添加的元素
+        newElement.classList.add('pageforge-added-element');
 
         // 确定插入位置
         let parent;
@@ -1124,16 +1124,16 @@
             case 'flex-row': {
                 // 横向布局容器：两个子元素并排排列
                 el = document.createElement('div');
-                el.classList.add('webedit-flex-container');
+                el.classList.add('pageforge-flex-container');
                 el.style.cssText = 'display: flex; flex-direction: row; gap: 16px; padding: 16px; margin: 8px 0; min-height: 80px; border-radius: 8px;';
                 const rowChild1 = document.createElement('div');
                 rowChild1.style.cssText = 'flex: 1; min-height: 60px; padding: 16px; background: rgba(59,130,246,0.08); border: 1px dashed rgba(59,130,246,0.3); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #6b7280; font-size: 14px;';
                 rowChild1.textContent = '左侧区域';
-                rowChild1.classList.add('webedit-added-element');
+                rowChild1.classList.add('pageforge-added-element');
                 const rowChild2 = document.createElement('div');
                 rowChild2.style.cssText = 'flex: 1; min-height: 60px; padding: 16px; background: rgba(16,185,129,0.08); border: 1px dashed rgba(16,185,129,0.3); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #6b7280; font-size: 14px;';
                 rowChild2.textContent = '右侧区域';
-                rowChild2.classList.add('webedit-added-element');
+                rowChild2.classList.add('pageforge-added-element');
                 el.appendChild(rowChild1);
                 el.appendChild(rowChild2);
                 break;
@@ -1142,16 +1142,16 @@
             case 'flex-col': {
                 // 纵向布局容器：两个子元素上下排列
                 el = document.createElement('div');
-                el.classList.add('webedit-flex-container');
+                el.classList.add('pageforge-flex-container');
                 el.style.cssText = 'display: flex; flex-direction: column; gap: 16px; padding: 16px; margin: 8px 0; min-height: 80px; border-radius: 8px;';
                 const colChild1 = document.createElement('div');
                 colChild1.style.cssText = 'flex: 1; min-height: 60px; padding: 16px; background: rgba(139,92,246,0.08); border: 1px dashed rgba(139,92,246,0.3); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #6b7280; font-size: 14px;';
                 colChild1.textContent = '上方区域';
-                colChild1.classList.add('webedit-added-element');
+                colChild1.classList.add('pageforge-added-element');
                 const colChild2 = document.createElement('div');
                 colChild2.style.cssText = 'flex: 1; min-height: 60px; padding: 16px; background: rgba(245,158,11,0.08); border: 1px dashed rgba(245,158,11,0.3); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #6b7280; font-size: 14px;';
                 colChild2.textContent = '下方区域';
-                colChild2.classList.add('webedit-added-element');
+                colChild2.classList.add('pageforge-added-element');
                 el.appendChild(colChild1);
                 el.appendChild(colChild2);
                 break;
@@ -1174,10 +1174,10 @@
         if (event.button !== 0) return; // 仅左键
 
         const target = event.target;
-        // 忽略 WebEdit 自身 UI
-        if (target.closest('.webedit-overlay') ||
-            target.classList.contains('webedit-drag-ghost') ||
-            target.classList.contains('webedit-drop-indicator')) return;
+        // 忽略 PageForge 自身 UI
+        if (target.closest('.pageforge-overlay') ||
+            target.classList.contains('pageforge-drag-ghost') ||
+            target.classList.contains('pageforge-drop-indicator')) return;
 
         // 只有当点击的是已选中的元素（或其内部子元素）时才启动拖拽
         if (!selectedElement) return;
@@ -1221,20 +1221,20 @@
 
     /** 启动拖拽：创建幽灵克隆和指示线 */
     function startDrag(event) {
-        document.body.classList.add('webedit-dragging');
-        dragElement.classList.add('webedit-drag-source');
-        dragElement.classList.remove('webedit-selected');
+        document.body.classList.add('pageforge-dragging');
+        dragElement.classList.add('pageforge-drag-source');
+        dragElement.classList.remove('pageforge-selected');
 
         // 清除 hover 状态
         if (hoveredElement) {
-            hoveredElement.classList.remove('webedit-hover');
+            hoveredElement.classList.remove('pageforge-hover');
             hoveredElement = null;
         }
 
         // 创建幽灵克隆（跟随鼠标的缩略图）
         dragGhost = dragElement.cloneNode(true);
-        dragGhost.classList.add('webedit-drag-ghost');
-        dragGhost.classList.remove('webedit-drag-source', 'webedit-selected', 'webedit-hover');
+        dragGhost.classList.add('pageforge-drag-ghost');
+        dragGhost.classList.remove('pageforge-drag-source', 'pageforge-selected', 'pageforge-hover');
         // 限制幽灵大小
         const rect = dragElement.getBoundingClientRect();
         dragGhost.style.width = Math.min(rect.width, 400) + 'px';
@@ -1244,7 +1244,7 @@
 
         // 创建放置指示线
         dropIndicator = document.createElement('div');
-        dropIndicator.classList.add('webedit-drop-indicator');
+        dropIndicator.classList.add('pageforge-drop-indicator');
         dropIndicator.style.display = 'none';
         document.body.appendChild(dropIndicator);
 
@@ -1286,10 +1286,10 @@
             return;
         }
 
-        // 忽略 WebEdit UI 元素和 body/html
-        if (elementBelow.closest('.webedit-overlay') ||
-            elementBelow.classList.contains('webedit-drag-ghost') ||
-            elementBelow.classList.contains('webedit-drop-indicator') ||
+        // 忽略 PageForge UI 元素和 body/html
+        if (elementBelow.closest('.pageforge-overlay') ||
+            elementBelow.classList.contains('pageforge-drag-ghost') ||
+            elementBelow.classList.contains('pageforge-drop-indicator') ||
             elementBelow === document.body ||
             elementBelow === document.documentElement) {
             clearDropTarget();
@@ -1344,16 +1344,16 @@
         // 高亮目标
         if (position === 'left' || position === 'right') {
             // 并排模式：高亮目标元素本身
-            targetEl.classList.add('webedit-drop-target');
+            targetEl.classList.add('pageforge-drop-target');
         } else if (parentEl && parentEl !== document.body) {
-            parentEl.classList.add('webedit-drop-target');
+            parentEl.classList.add('pageforge-drop-target');
         }
 
         // 增强当前悬停目标的高亮（区别于其他可放置区域）
-        document.querySelectorAll('.webedit-drop-zone-active').forEach(el => {
-            el.classList.remove('webedit-drop-zone-active');
+        document.querySelectorAll('.pageforge-drop-zone-active').forEach(el => {
+            el.classList.remove('pageforge-drop-zone-active');
         });
-        targetEl.classList.add('webedit-drop-zone-active');
+        targetEl.classList.add('pageforge-drop-zone-active');
 
         // 定位指示线
         if (dropIndicator) {
@@ -1372,7 +1372,7 @@
                 dropIndicator.style.left = indicatorX + 'px';
                 dropIndicator.style.width = '3px';
                 dropIndicator.style.height = targetRect.height + 'px';
-                dropIndicator.classList.add('webedit-drop-indicator-vertical');
+                dropIndicator.classList.add('pageforge-drop-indicator-vertical');
             } else {
                 // 横向指示线（默认，用于纵向布局）
                 const indicatorY = position === 'before'
@@ -1382,7 +1382,7 @@
                 dropIndicator.style.left = (targetRect.left + scrollLeft) + 'px';
                 dropIndicator.style.width = targetRect.width + 'px';
                 dropIndicator.style.height = '3px';
-                dropIndicator.classList.remove('webedit-drop-indicator-vertical');
+                dropIndicator.classList.remove('pageforge-drop-indicator-vertical');
             }
             dropIndicator.style.display = 'block';
         }
@@ -1463,11 +1463,11 @@
 
     /** 清除放置目标的高亮 */
     function clearDropTarget() {
-        document.querySelectorAll('.webedit-drop-target').forEach(el => {
-            el.classList.remove('webedit-drop-target');
+        document.querySelectorAll('.pageforge-drop-target').forEach(el => {
+            el.classList.remove('pageforge-drop-target');
         });
-        document.querySelectorAll('.webedit-drop-zone-active').forEach(el => {
-            el.classList.remove('webedit-drop-zone-active');
+        document.querySelectorAll('.pageforge-drop-zone-active').forEach(el => {
+            el.classList.remove('pageforge-drop-zone-active');
         });
         if (dropIndicator) {
             dropIndicator.style.display = 'none';
@@ -1544,7 +1544,7 @@
 
         // 创建 flex-row 容器
         const wrapper = document.createElement('div');
-        wrapper.classList.add('webedit-flex-container', 'webedit-added-element');
+        wrapper.classList.add('pageforge-flex-container', 'pageforge-added-element');
         wrapper.style.cssText = 'display: flex; flex-direction: row; gap: 16px; padding: 0; margin: 0; min-height: 0; align-items: stretch;';
 
         // 将容器插入到目标元素原来的位置
@@ -1588,8 +1588,8 @@
     /** 结束拖拽，清理状态 */
     function endDrag() {
         if (dragElement) {
-            dragElement.classList.remove('webedit-drag-source');
-            dragElement.classList.add('webedit-selected');
+            dragElement.classList.remove('pageforge-drag-source');
+            dragElement.classList.add('pageforge-selected');
         }
 
         if (dragGhost) {
@@ -1605,7 +1605,7 @@
             dropIndicator = null;
         }
 
-        document.body.classList.remove('webedit-dragging');
+        document.body.classList.remove('pageforge-dragging');
         isDragging = false;
         dragStarted = false;
         dragElement = null;
@@ -1618,7 +1618,7 @@
     /**
      * 收集所有合法放置目标元素
      * 策略：从 document.body 出发，递归扫描所有可见的块级元素；
-     * 排除被拖拽元素自身及其子孙、WebEdit UI 元素。
+     * 排除被拖拽元素自身及其子孙、PageForge UI 元素。
      * @param {Element} dragEl - 正在被拖拽的元素
      * @returns {Set<Element>} 合法放置目标集合
      */
@@ -1672,11 +1672,11 @@
                     scan(child);
                     continue;
                 }
-                // 跳过 WebEdit 自身的 UI 元素
-                if (child.classList.contains('webedit-overlay') ||
-                    child.classList.contains('webedit-drag-ghost') ||
-                    child.classList.contains('webedit-drop-indicator') ||
-                    child.classList.contains('webedit-resize-handles')) continue;
+                // 跳过 PageForge 自身的 UI 元素
+                if (child.classList.contains('pageforge-overlay') ||
+                    child.classList.contains('pageforge-drag-ghost') ||
+                    child.classList.contains('pageforge-drop-indicator') ||
+                    child.classList.contains('pageforge-resize-handles')) continue;
                 // 跳过不应高亮的标签
                 if (skipTags.has(child.tagName)) continue;
 
@@ -1706,7 +1706,7 @@
         if (!dragElement) return;
         const zones = collectDropZones(dragElement);
         zones.forEach(el => {
-            el.classList.add('webedit-drop-zone');
+            el.classList.add('pageforge-drop-zone');
         });
     }
 
@@ -1715,11 +1715,11 @@
      * 在 endDrag 中调用
      */
     function clearDropZones() {
-        document.querySelectorAll('.webedit-drop-zone').forEach(el => {
-            el.classList.remove('webedit-drop-zone');
+        document.querySelectorAll('.pageforge-drop-zone').forEach(el => {
+            el.classList.remove('pageforge-drop-zone');
         });
-        document.querySelectorAll('.webedit-drop-zone-active').forEach(el => {
-            el.classList.remove('webedit-drop-zone-active');
+        document.querySelectorAll('.pageforge-drop-zone-active').forEach(el => {
+            el.classList.remove('pageforge-drop-zone-active');
         });
     }
 
@@ -1736,7 +1736,7 @@
 
     function enableEditMode() {
         isEditMode = true;
-        document.body.classList.add('webedit-active');
+        document.body.classList.add('pageforge-active');
         document.addEventListener('mouseover', handleMouseOver, true);
         document.addEventListener('mouseout', handleMouseOut, true);
         document.addEventListener('click', handleClick, true);
@@ -1764,11 +1764,11 @@
         endDrag(); // 清理可能还在进行的拖拽
 
         if (hoveredElement) {
-            hoveredElement.classList.remove('webedit-hover');
+            hoveredElement.classList.remove('pageforge-hover');
             hoveredElement = null;
         }
 
-        document.body.classList.remove('webedit-active');
+        document.body.classList.remove('pageforge-active');
         document.removeEventListener('mouseover', handleMouseOver, true);
         document.removeEventListener('mouseout', handleMouseOut, true);
         document.removeEventListener('click', handleClick, true);
@@ -1847,11 +1847,11 @@
     function getPageHTML() {
         // 移除编辑模式的临时 class，获取干净的 HTML
         const editClasses = [
-            'webedit-active', 'webedit-hover', 'webedit-selected', 'webedit-hidden-element',
-            'webedit-dragging', 'webedit-drag-source', 'webedit-drag-ghost',
-            'webedit-drop-indicator', 'webedit-drop-target', 'webedit-added-element',
-            'webedit-flex-container', 'webedit-drop-zone', 'webedit-drop-zone-active',
-            'webedit-copy-flash'
+            'pageforge-active', 'pageforge-hover', 'pageforge-selected', 'pageforge-hidden-element',
+            'pageforge-dragging', 'pageforge-drag-source', 'pageforge-drag-ghost',
+            'pageforge-drop-indicator', 'pageforge-drop-target', 'pageforge-added-element',
+            'pageforge-flex-container', 'pageforge-drop-zone', 'pageforge-drop-zone-active',
+            'pageforge-copy-flash'
         ];
         const elementsWithEditClasses = [];
 
@@ -1863,7 +1863,7 @@
         });
 
         // 移除拖拽和缩放产生的临时 DOM 元素
-        document.querySelectorAll('.webedit-drag-ghost, .webedit-drop-indicator, .webedit-resize-handles').forEach(el => el.remove());
+        document.querySelectorAll('.pageforge-drag-ghost, .pageforge-drop-indicator, .pageforge-resize-handles').forEach(el => el.remove());
 
         // 移除 contentEditable 属性
         document.querySelectorAll('[contenteditable="true"]').forEach(el => {
@@ -1921,7 +1921,7 @@
 
         // 创建新的 Flex 容器
         const wrapper = document.createElement('div');
-        wrapper.classList.add('webedit-flex-container', 'webedit-added-element');
+        wrapper.classList.add('pageforge-flex-container', 'pageforge-added-element');
         // 根据方向设置初始样式
         const isRow = direction === 'row';
         wrapper.style.cssText = `display: flex; flex-direction: ${isRow ? 'row' : 'column'}; gap: 16px; padding: 16px; margin: 0; align-items: stretch;`;
@@ -2069,11 +2069,11 @@
     let exportIdCounter = 0;
     function getExportId(element) {
         if (!element) return null;
-        let id = element.getAttribute('data-webedit-export-id');
+        let id = element.getAttribute('data-pageforge-export-id');
         if (!id) {
             exportIdCounter++;
             id = Date.now().toString(36) + '-' + exportIdCounter;
-            element.setAttribute('data-webedit-export-id', id);
+            element.setAttribute('data-pageforge-export-id', id);
         }
         return id;
     }
@@ -2108,7 +2108,7 @@
         // 这里简化处理：我们只导出 undoStack 涉及到的元素的内联样式
 
         let cssLines = [];
-        cssLines.push('/* WebEdit CSS Patch Generated on ' + new Date().toLocaleString() + ' */');
+        cssLines.push('/* PageForge CSS Patch Generated on ' + new Date().toLocaleString() + ' */');
         cssLines.push('');
 
         styledElements.forEach(element => {
@@ -2121,7 +2121,7 @@
             // 格式化输出
             const formattedCssText = cssText.split(';').map(s => s.trim()).filter(Boolean).join(';\n  ') + ';';
 
-            cssLines.push(`[data-webedit-export-id="${exportId}"] {`);
+            cssLines.push(`[data-pageforge-export-id="${exportId}"] {`);
             cssLines.push(`  ${formattedCssText}`);
             cssLines.push('}\n');
         });
@@ -2190,7 +2190,7 @@
             // 取消所有高亮和选中
             deselectElement();
             if (hoveredElement) {
-                hoveredElement.classList.remove('webedit-hover');
+                hoveredElement.classList.remove('pageforge-hover');
                 hoveredElement = null;
             }
 
@@ -2203,7 +2203,7 @@
             // 显示滑块横幅
             if (!previewBanner) {
                 previewBanner = document.createElement('div');
-                previewBanner.classList.add('webedit-overlay');
+                previewBanner.classList.add('pageforge-overlay');
                 previewBanner.style.cssText = `
                     position: fixed;
                     top: 20px;
@@ -2220,7 +2220,7 @@
                     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255,255,255,0.1);
                     backdrop-filter: blur(12px);
                     -webkit-backdrop-filter: blur(12px);
-                    animation: webeditFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+                    animation: pageforgeFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
                     display: flex;
                     flex-direction: column;
                     align-items: center;
@@ -2236,20 +2236,20 @@
                     </div>
                     <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
                         <span style="font-size: 12px; color: #94a3b8; font-variant-numeric: tabular-nums;">最初</span>
-                        <input type="range" id="webedit-history-slider" min="0" max="` + undoStack.length + `" value="0" 
+                        <input type="range" id="pageforge-history-slider" min="0" max="` + undoStack.length + `" value="0" 
                             style="flex: 1; accent-color: #3b82f6; height: 4px; border-radius: 2px; cursor: pointer; background: rgba(255,255,255,0.2); appearance: none; outline: none;">
                         <span style="font-size: 12px; color: #94a3b8; font-variant-numeric: tabular-nums;">最新</span>
                     </div>
-                    <div id="webedit-history-label" style="font-size: 13px; color: #cbd5e1; background: rgba(255,255,255,0.1); padding: 4px 12px; border-radius: 20px;">
+                    <div id="pageforge-history-label" style="font-size: 13px; color: #cbd5e1; background: rgba(255,255,255,0.1); padding: 4px 12px; border-radius: 20px;">
                         处于原始状态 ( 0 / ` + undoStack.length + ` )
                     </div>
                 `;
 
                 // 给 slider 的 thumb 加上样式
                 const style = document.createElement('style');
-                style.id = 'webedit-slider-style';
+                style.id = 'pageforge-slider-style';
                 style.textContent = `
-                    #webedit-history-slider::-webkit-slider-thumb {
+                    #pageforge-history-slider::-webkit-slider-thumb {
                         appearance: none;
                         width: 16px;
                         height: 16px;
@@ -2259,18 +2259,18 @@
                         cursor: grab;
                         transition: transform 0.1s;
                     }
-                    #webedit-history-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
-                    #webedit-history-slider::-webkit-slider-thumb:active { cursor: grabbing; transform: scale(0.95); }
+                    #pageforge-history-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
+                    #pageforge-history-slider::-webkit-slider-thumb:active { cursor: grabbing; transform: scale(0.95); }
                 `;
-                if (!document.getElementById('webedit-slider-style')) {
+                if (!document.getElementById('pageforge-slider-style')) {
                     document.head.appendChild(style);
                 }
 
                 document.body.appendChild(previewBanner);
 
                 // 绑定拖拽事件 (Time-travel)
-                const slider = previewBanner.querySelector('#webedit-history-slider');
-                const label = previewBanner.querySelector('#webedit-history-label');
+                const slider = previewBanner.querySelector('#pageforge-history-slider');
+                const label = previewBanner.querySelector('#pageforge-history-label');
 
                 slider.addEventListener('input', (e) => {
                     const targetIndex = parseInt(e.target.value, 10);
@@ -2306,11 +2306,11 @@
                 previewBanner.addEventListener('click', (e) => e.stopPropagation());
                 previewBanner.addEventListener('mouseover', (e) => e.stopPropagation());
 
-                if (!document.getElementById('webedit-anim-style')) {
+                if (!document.getElementById('pageforge-anim-style')) {
                     const animStyle = document.createElement('style');
-                    animStyle.id = 'webedit-anim-style';
+                    animStyle.id = 'pageforge-anim-style';
                     animStyle.textContent = `
-                        @keyframes webeditFadeIn {
+                        @keyframes pageforgeFadeIn {
                             from { opacity: 0; transform: translate(-50%, -15px) scale(0.97); }
                             to { opacity: 1; transform: translate(-50%, 0) scale(1); }
                         }
@@ -2327,13 +2327,13 @@
 
             // 移除横幅和注入的样式
             if (previewBanner) {
-                previewBanner.style.animation = 'webeditFadeIn 0.2s reverse forwards';
+                previewBanner.style.animation = 'pageforgeFadeIn 0.2s reverse forwards';
                 setTimeout(() => {
                     if (previewBanner) {
                         previewBanner.remove();
                         previewBanner = null;
                     }
-                    const sliderStyle = document.getElementById('webedit-slider-style');
+                    const sliderStyle = document.getElementById('pageforge-slider-style');
                     if (sliderStyle) sliderStyle.remove();
                 }, 200);
             }

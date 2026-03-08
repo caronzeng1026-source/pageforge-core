@@ -1,4 +1,4 @@
-// WebEdit Background Service Worker
+// PageForge Background Service Worker
 // 管理编辑模式状态，中转 Content Script 与 Side Panel 之间的消息
 
 // 点击插件图标时打开 Side Panel

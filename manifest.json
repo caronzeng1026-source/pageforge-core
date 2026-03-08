@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "WebEdit - 页面编辑器",
+  "name": "PageForge - 页面编辑器",
   "description": "所见即所得的网页编辑工具，轻松修改任意页面的文本和样式",
   "version": "1.0.0",
   "icons": {
@@ -38,6 +38,6 @@
     }
   ],
   "action": {
-    "default_title": "打开 WebEdit 编辑面板"
+    "default_title": "打开 PageForge 编辑面板"
   }
 }

@@ -1,22 +1,22 @@
-/* WebEdit Content Script 样式
+/* PageForge Content Script 样式
  * 编辑模式下的元素高亮、选中、光标等视觉反馈
  */
 
 /* 编辑模式下光标变为十字选择器 */
-body.webedit-active,
-body.webedit-active * {
+body.pageforge-active,
+body.pageforge-active * {
   cursor: crosshair !important;
 }
 
 /* 鼠标悬停时的高亮效果 */
-.webedit-hover {
+.pageforge-hover {
   outline: 2px dashed rgba(59, 130, 246, 0.7) !important;
   outline-offset: 2px !important;
   transition: outline 0.15s ease !important;
 }
 
 /* 选中元素的高亮效果 */
-.webedit-selected {
+.pageforge-selected {
   outline: 2px solid rgba(59, 130, 246, 0.9) !important;
   outline-offset: 2px !important;
   box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15) !important;
@@ -24,14 +24,14 @@ body.webedit-active * {
 }
 
 /* 选中元素且正在编辑文本时 */
-.webedit-selected[contenteditable="true"] {
+.pageforge-selected[contenteditable="true"] {
   cursor: text !important;
   outline-color: rgba(16, 185, 129, 0.9) !important;
   box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.15) !important;
 }
 
 /* 被隐藏的元素标记（编辑模式下仍然可见，降低透明度） */
-body.webedit-active .webedit-hidden-element {
+body.pageforge-active .pageforge-hidden-element {
   display: block !important;
   opacity: 0.2 !important;
   outline: 2px dashed rgba(239, 68, 68, 0.5) !important;
@@ -40,32 +40,32 @@ body.webedit-active .webedit-hidden-element {
 }
 
 /* 防止编辑模式下链接跳转和表单提交等默认行为的视觉提示 */
-body.webedit-active a,
-body.webedit-active button,
-body.webedit-active input,
-body.webedit-active select,
-body.webedit-active textarea {
+body.pageforge-active a,
+body.pageforge-active button,
+body.pageforge-active input,
+body.pageforge-active select,
+body.pageforge-active textarea {
   pointer-events: auto !important;
 }
 
 /* ===== 拖拽相关样式 ===== */
 
 /* 拖拽进行中的全局光标 */
-body.webedit-dragging,
-body.webedit-dragging * {
+body.pageforge-dragging,
+body.pageforge-dragging * {
   cursor: grabbing !important;
   user-select: none !important;
 }
 
 /* 正在被拖拽的原始元素（半透明占位） */
-.webedit-drag-source {
+.pageforge-drag-source {
   opacity: 0.3 !important;
   outline: 2px dashed rgba(59, 130, 246, 0.5) !important;
   outline-offset: 2px !important;
 }
 
 /* 跟随鼠标的拖拽幽灵 */
-.webedit-drag-ghost {
+.pageforge-drag-ghost {
   position: fixed !important;
   pointer-events: none !important;
   z-index: 2147483647 !important;
@@ -80,7 +80,7 @@ body.webedit-dragging * {
 }
 
 /* 放置指示线（水平线标记插入位置） */
-.webedit-drop-indicator {
+.pageforge-drop-indicator {
   position: absolute !important;
   left: 0 !important;
   right: 0 !important;
@@ -90,11 +90,11 @@ body.webedit-dragging * {
   z-index: 2147483646 !important;
   pointer-events: none !important;
   box-shadow: 0 0 8px rgba(59, 130, 246, 0.5) !important;
-  animation: webedit-pulse 1s ease-in-out infinite !important;
+  animation: pageforge-pulse 1s ease-in-out infinite !important;
 }
 
 /* 放置指示线的呼吸动画 */
-@keyframes webedit-pulse {
+@keyframes pageforge-pulse {
 
   0%,
   100% {
@@ -107,7 +107,7 @@ body.webedit-dragging * {
 }
 
 /* 拖拽目标容器的高亮 */
-.webedit-drop-target {
+.pageforge-drop-target {
   outline: 2px dashed rgba(16, 185, 129, 0.6) !important;
   outline-offset: -2px !important;
   background-color: rgba(16, 185, 129, 0.04) !important;
@@ -116,13 +116,13 @@ body.webedit-dragging * {
 /* ===== 新增元素标记 ===== */
 
 /* 编辑模式下新添加的元素标记（微弱蓝色虚线提示） */
-body.webedit-active .webedit-added-element {
+body.pageforge-active .pageforge-added-element {
   outline: 1px dashed rgba(59, 130, 246, 0.4) !important;
   outline-offset: 1px !important;
-  animation: webedit-fadeIn 0.3s ease !important;
+  animation: pageforge-fadeIn 0.3s ease !important;
 }
 
-@keyframes webedit-fadeIn {
+@keyframes pageforge-fadeIn {
   from {
     opacity: 0;
     transform: scale(0.97);
@@ -137,7 +137,7 @@ body.webedit-active .webedit-added-element {
 /* ===== 缩放手柄样式 ===== */
 
 /* 单个缩放手柄的基础外观 */
-.webedit-resize-handle {
+.pageforge-resize-handle {
   position: absolute !important;
   width: 10px !important;
   height: 10px !important;
@@ -150,7 +150,7 @@ body.webedit-active .webedit-added-element {
 }
 
 /* 悬停时手柄高亮 */
-.webedit-resize-handle:hover {
+.pageforge-resize-handle:hover {
   background: #3b82f6 !important;
   transform: scale(1.3) !important;
 }
@@ -158,83 +158,83 @@ body.webedit-active .webedit-added-element {
 /* --- 8 个方向的定位 --- */
 
 /* 左上角 */
-.webedit-resize-nw {
+.pageforge-resize-nw {
   top: -5px !important;
   left: -5px !important;
 }
 
 /* 上边中点 */
-.webedit-resize-n {
+.pageforge-resize-n {
   top: -5px !important;
   left: 50% !important;
   transform: translateX(-50%) !important;
 }
 
-.webedit-resize-n:hover {
+.pageforge-resize-n:hover {
   transform: translateX(-50%) scale(1.3) !important;
 }
 
 /* 右上角 */
-.webedit-resize-ne {
+.pageforge-resize-ne {
   top: -5px !important;
   right: -5px !important;
 }
 
 /* 左边中点 */
-.webedit-resize-w {
+.pageforge-resize-w {
   top: 50% !important;
   left: -5px !important;
   transform: translateY(-50%) !important;
 }
 
-.webedit-resize-w:hover {
+.pageforge-resize-w:hover {
   transform: translateY(-50%) scale(1.3) !important;
 }
 
 /* 右边中点 */
-.webedit-resize-e {
+.pageforge-resize-e {
   top: 50% !important;
   right: -5px !important;
   transform: translateY(-50%) !important;
 }
 
-.webedit-resize-e:hover {
+.pageforge-resize-e:hover {
   transform: translateY(-50%) scale(1.3) !important;
 }
 
 /* 左下角 */
-.webedit-resize-sw {
+.pageforge-resize-sw {
   bottom: -5px !important;
   left: -5px !important;
 }
 
 /* 下边中点 */
-.webedit-resize-s {
+.pageforge-resize-s {
   bottom: -5px !important;
   left: 50% !important;
   transform: translateX(-50%) !important;
 }
 
-.webedit-resize-s:hover {
+.pageforge-resize-s:hover {
   transform: translateX(-50%) scale(1.3) !important;
 }
 
 /* 右下角 */
-.webedit-resize-se {
+.pageforge-resize-se {
   bottom: -5px !important;
   right: -5px !important;
 }
 
 /* 缩放进行中的全局光标和禁止选择 */
-body.webedit-resizing,
-body.webedit-resizing * {
+body.pageforge-resizing,
+body.pageforge-resizing * {
   user-select: none !important;
 }
 
 /* ===== 布局容器相关样式 ===== */
 
 /* 竖向放置指示线（用于横向 flex 容器内拖放） */
-.webedit-drop-indicator-vertical {
+.pageforge-drop-indicator-vertical {
   /* 覆盖横向指示线的 left/right 展开规则 */
   left: auto !important;
   right: auto !important;
@@ -242,14 +242,14 @@ body.webedit-resizing * {
 }
 
 /* 编辑模式下 Flex 布局容器的视觉标记 */
-body.webedit-active .webedit-flex-container {
+body.pageforge-active .pageforge-flex-container {
   outline: 2px dashed rgba(139, 92, 246, 0.4) !important;
   outline-offset: 2px !important;
   position: relative;
 }
 
 /* 容器角落的标签提示 */
-body.webedit-active .webedit-flex-container::before {
+body.pageforge-active .pageforge-flex-container::before {
   content: 'Layout';
   position: absolute;
   top: -10px;
@@ -268,7 +268,7 @@ body.webedit-active .webedit-flex-container::before {
 /* ===== 拖拽放置区域可视化提示 ===== */
 
 /* 所有合法放置目标的淡蓝色提示（拖拽开始时生效） */
-.webedit-drop-zone {
+.pageforge-drop-zone {
   outline: 2px dashed rgba(59, 130, 246, 0.35) !important;
   outline-offset: -2px !important;
   background-color: rgba(59, 130, 246, 0.04) !important;
@@ -276,7 +276,7 @@ body.webedit-active .webedit-flex-container::before {
 }
 
 /* 当前鼠标悬停的放置目标 - 增强高亮 */
-.webedit-drop-zone-active {
+.pageforge-drop-zone-active {
   outline: 2px solid rgba(16, 185, 129, 0.8) !important;
   outline-offset: -2px !important;
   background-color: rgba(16, 185, 129, 0.08) !important;
@@ -288,7 +288,7 @@ body.webedit-active .webedit-flex-container::before {
 /* ===== 复制反馈动画 ===== */
 
 /* 复制成功时的绿色闪烁提示 */
-@keyframes webedit-copyFlash {
+@keyframes pageforge-copyFlash {
   0% {
     box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.7) !important;
     outline-color: rgba(16, 185, 129, 0.9) !important;
@@ -300,6 +300,6 @@ body.webedit-active .webedit-flex-container::before {
   }
 }
 
-.webedit-copy-flash {
-  animation: webedit-copyFlash 0.4s ease !important;
+.pageforge-copy-flash {
+  animation: pageforge-copyFlash 0.4s ease !important;
 }
