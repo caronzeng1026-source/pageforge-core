@@ -13,7 +13,7 @@
 
 <br />
 
-WebEdit is a feature-rich, What-You-See-Is-What-You-Get (WYSIWYG) editing tool built directly into your browser. It empowers you to modify text, styling, and layout on any webpage in real-time, with seamless export options to seamlessly integrate your visual tweaks back into your source code.WebEdit 是一款功能丰富的所见即所得（WYSIWYG）编辑工具，直接内置于您的浏览器中。它使您能够实时修改任何网页上的文本、样式和布局，并提供无缝导出选项，以便将您的视觉调整无缝集成回源代码。
+PageForge is a feature-rich, What-You-See-Is-What-You-Get (WYSIWYG) editing tool built directly into your browser. It empowers you to modify text, styling, and layout on any webpage in real-time, with seamless export options to seamlessly integrate your visual tweaks back into your source code
 
 ---
 
