@@ -1,6 +1,7 @@
 <div align="center">
-  <img src="icons/icon-128.png" alt="WebEdit Logo" width="128" />
-  <h1>Pageforge </   & lt;h1>
+  <img src="icons/icon-fin.png" alt="PageForge Logo" width="128" />
+  <h1>PageForge</   & lt;h1>
+    <p></p>
   <p><strong>A powerful, a Chrome extension for directly editing real web pages visually.</   & lt;strong></p>
   <p>
     <a href="#-features">Features</a> •
