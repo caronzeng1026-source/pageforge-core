@@ -1,7 +1,8 @@
 <div align="center">
-  <img src="icons/icon-128.png" alt="PageForge Logo" width="128" />
-  <h1>PageForge</h1>
-  <p><strong>A powerful, WYSIWYG browser native web page editor.</strong></p>
+  <img src="icons/icon-fin.png" alt="PageForge Logo" width="128" />
+  <h1>PageForge</   & lt;h1>
+    <p></p>
+  <p><strong>A powerful, a Chrome extension for directly editing real web pages visually.</   & lt;strong></p>
   <p>
     <a href="#-features">Features</a> •
     <a href="#-installation-developer-mode">Installation</a> •
@@ -12,7 +13,7 @@
 
 <br />
 
-PageForge is a feature-rich, What-You-See-Is-What-You-Get (WYSIWYG) editing tool built directly into your browser. It empowers you to modify text, styling, and layout on any webpage in real-time, with seamless export options to seamlessly integrate your visual tweaks back into your source code.
+PageForge is a feature-rich, What-You-See-Is-What-You-Get (WYSIWYG) editing tool built directly into your browser. It empowers you to modify text, styling, and layout on any webpage in real-time, with seamless export options to seamlessly integrate your visual tweaks back into your source code
 
 ---
 
@@ -48,7 +49,7 @@ PageForge is a feature-rich, What-You-See-Is-What-You-Get (WYSIWYG) editing tool
 
 ## 📦 Installation (Developer Mode)
 
-PageForge is built on Chrome Manifest V3. Currently, it can be loaded locally using Developer Mode.
+WebEdit is built on Chrome Manifest V3. Currently, it can be loaded locally using Developer Mode.
 
 1. **Clone the repository**:
 
@@ -68,7 +69,7 @@ PageForge is built on Chrome Manifest V3. Currently, it can be loaded locally us
 
 ---
 
-## ⌨️ Shortcuts & Hotkeys
+## ⌨️ Shortcuts & Hotkeys   ## ⌨️ 快捷键与热键
 
 Boost your productivity with these built-in hotkeys:
 
